@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Edit Team{% else %}New Team{% endif %} — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center gap-3">
+  <a href="{% url 'teams:list' %}" class="btn btn-ghost-icon" title="Back to teams">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <div>
+    <h1 class="rp-page-title">
+      {% if form.instance.pk %}Edit Team{% else %}New Team{% endif %}
+    </h1>
+    <p class="rp-page-subtitle">
+      {% if form.instance.pk %}
+        Updating <strong>{{ form.instance.name }}</strong>
+      {% else %}
+        Add a new team to the business unit
+      {% endif %}
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-7">
+
+    <div class="rp-card">
+      <form method="post" novalidate id="team-form">
+        {% csrf_token %}
+
+        <!-- Name -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.name.id_for_label }}">
+            Team name <span class="rp-required">*</span>
+          </label>
+          <input
+            type="text"
+            id="{{ form.name.id_for_label }}"
+            name="{{ form.name.html_name }}"
+            value="{{ form.name.value|default:'' }}"
+            class="form-control rp-input {% if form.name.errors %}is-invalid{% endif %}"
+            placeholder="e.g. Platform Engineering"
+            required
+            autofocus
+          />
+          {% if form.name.errors %}
+          <div class="invalid-feedback">{{ form.name.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Description -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.description.id_for_label }}">
+            Description
+          </label>
+          <textarea
+            id="{{ form.description.id_for_label }}"
+            name="{{ form.description.html_name }}"
+            class="form-control rp-input {% if form.description.errors %}is-invalid{% endif %}"
+            rows="3"
+            placeholder="What does this team own or focus on?"
+          >{{ form.description.value|default:'' }}</textarea>
+          {% if form.description.errors %}
+          <div class="invalid-feedback">{{ form.description.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Active toggle -->
+        <div class="rp-field mb-5">
+          <div class="form-check form-switch rp-switch">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="{{ form.is_active.id_for_label }}"
+              name="{{ form.is_active.html_name }}"
+              {% if form.is_active.value %}checked{% endif %}
+            />
+            <label class="form-check-label rp-label" for="{{ form.is_active.id_for_label }}">
+              Active team
+            </label>
+          </div>
+          <p class="rp-hint mt-1">Inactive teams are hidden from planning views.</p>
+        </div>
+
+        <!-- Form errors (non-field) -->
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          {% for err in form.non_field_errors %}
+          <div>{{ err }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>
+            {% if form.instance.pk %}Save changes{% else %}Create team{% endif %}
+          </button>
+          <a href="{% url 'teams:list' %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+          {% if form.instance.pk %}
+          <button type="button"
+                  class="btn btn-outline-danger ms-auto"
+                  onclick="confirmDelete({{ form.instance.pk }}, '{{ form.instance.name|escapejs }}')">
+            <i class="bi bi-trash me-1"></i>Delete
+          </button>
+          {% endif %}
+        </div>
+
+      </form>
+    </div>
+
+  </div>
+
+  <!-- Side info panel -->
+  <div class="col-lg-4 offset-lg-1 mt-4 mt-lg-0">
+    <div class="rp-card rp-card--muted">
+      <h6 class="fw-600 mb-3"><i class="bi bi-info-circle me-2"></i>Tips</h6>
+      <ul class="rp-tip-list">
+        <li>Use a clear, recognisable team name — it will appear across sprint boards and reports.</li>
+        <li>Inactive teams remain in historical data but are excluded from new planning.</li>
+      </ul>
+    </div>
+
+    {% if form.instance.pk %}
+    <div class="rp-card rp-card--muted mt-3">
+      <h6 class="fw-600 mb-2"><i class="bi bi-clock-history me-2"></i>Metadata</h6>
+      <dl class="rp-meta-list">
+        <dt>Created</dt>
+        <dd>{{ form.instance.created_at|date:"d M Y, H:i" }}</dd>
+        <dt>Last updated</dt>
+        <dd>{{ form.instance.updated_at|date:"d M Y, H:i" }}</dd>
+      </dl>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Delete modal (reused from list) -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete team?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-team-name"></strong> will be permanently removed.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+          Cancel
+        </button>
+        <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-btn">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/teams.js' %}"></script>
+{% endblock %}
