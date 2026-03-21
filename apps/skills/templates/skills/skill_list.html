@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Teams — Demand Management{% endblock %}
+{% block title %}Skills — Demand Management{% endblock %}
 
 {% block page_header %}
 <div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-start justify-content-between flex-wrap gap-3">
   <div>
-    <h1 class="rp-page-title">Teams</h1>
-    <p class="rp-page-subtitle">Manage all teams in your business unit</p>
+    <h1 class="rp-page-title">Skills</h1>
+    <p class="rp-page-subtitle">Configure skill codes used across engineers and demands</p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <!-- Export -->
@@ -18,9 +18,9 @@
       <ul class="dropdown-menu dropdown-menu-end">
       </ul>
     </div>
-    <!-- New Team -->
-    <a href="{% url 'teams:create' %}" class="btn btn-primary btn-sm">
-      <i class="bi bi-plus-lg me-1"></i>New Team
+    <!-- New Skill -->
+    <a href="{% url 'skills:create' %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>New Skill
     </a>
   </div>
 </div>
@@ -30,23 +30,22 @@
 
 <!-- Stats row -->
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4">
     <div class="rp-stat-card">
-      <span class="rp-stat-label">Total Teams</span>
-      <span class="rp-stat-value">{{ teams|length }}</span>
+      <span class="rp-stat-label">Total Skills</span>
+      <span class="rp-stat-value">{{ total_count }}</span>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4">
     <div class="rp-stat-card">
-      <span class="rp-stat-label">Active Teams</span>
+      <span class="rp-stat-label">Active</span>
       <span class="rp-stat-value">{{ active_count }}</span>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4">
     <div class="rp-stat-card">
-      <span class="rp-stat-label">Total Team Members</span>
-      <!-- <span class="rp-stat-value">{{ total_capacity }}</span> -->
-      <span class="rp-stat-value">0</span>
+      <span class="rp-stat-label">Inactive</span>
+      <span class="rp-stat-value">{{ inactive_count }}</span>
     </div>
   </div>
 </div>
@@ -55,53 +54,49 @@
 <div class="rp-toolbar d-flex gap-3 mb-3 flex-wrap">
   <div class="rp-search flex-grow-1">
     <i class="bi bi-search rp-search-icon"></i>
-    <input type="text" id="team-search" class="form-control rp-search-input"
-           placeholder="Search teams by name…" />
+    <input type="text" id="skill-search" class="form-control rp-search-input"
+           placeholder="Search by skill code or description…" />
   </div>
   <select id="status-filter" class="form-select rp-select" style="max-width:160px"
-          onchange="filterTable()">
+          onchange="filterSkillTable()">
     <option value="">All statuses</option>
     <option value="active">Active</option>
     <option value="inactive">Inactive</option>
   </select>
 </div>
 
-<!-- Teams table -->
+<!-- Skills table -->
 <div class="rp-table-wrap">
-  <table class="table rp-table" id="teams-table">
+  <table class="table rp-table" id="skills-table">
     <thead>
       <tr>
-        <th class="sortable" data-col="0" onclick="sortTable(0)">
-          Name <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        <th class="sortable" onclick="sortSkillTable(0)">
+          Skill code <i class="bi bi-chevron-expand rp-sort-icon"></i>
         </th>
-        <th class="text-center">Description</th>
-        <th class="text-center sortable" onclick="sortTable(2)">
-          Total Team Members <i class="bi bi-chevron-expand rp-sort-icon"></i>
-        </th>
-        <th class="text-center sortable" onclick="sortTable(3)">
+        <th>Description</th>
+        <th class="text-center sortable" onclick="sortSkillTable(2)">
           Status <i class="bi bi-chevron-expand rp-sort-icon"></i>
         </th>
         <th class="text-center">Actions</th>
       </tr>
     </thead>
     <tbody>
-      {% for team in teams %}
-      <tr data-team-id="{{ team.id }}"
-          data-name="{{ team.name|lower }}"
-          data-status="{% if team.is_active %}active{% else %}inactive{% endif %}">
+      {% for skill in skills %}
+      <tr data-skill-id="{{ skill.id }}"
+          data-code="{{ skill.skill|lower }}"
+          data-desc="{{ skill.description|lower }}"
+          data-status="{% if skill.is_active %}active{% else %}inactive{% endif %}">
+
         <td>
-          <a href="{% url 'teams:detail' team.pk %}" class="rp-link fw-500">
-            {{ team.name }}
+          <a href="{% url 'skills:detail' skill.pk %}" class="rp-link">
+            <span class="rp-code">{{ skill.skill }}</span>
           </a>
         </td>
-        <td class="text-secondary" style="max-width:260px">
-          <!-- <span class="rp-truncate">{{ team.description|default:"—" }}</span> -->
-          <span class="rp-truncate">{{ team.description }}</span>
+        <td class="text-secondary" style="max-width:340px">
+          <span class="rp-truncate">{{ skill.description }}</span>
         </td>
-        <!-- <td class="text-center fw-500">{{ team.capacity }}</td> -->
-        <td class="text-center fw-500">0</td>
         <td class="text-center">
-          {% if team.is_active %}
+          {% if skill.is_active %}
           <span class="rp-badge rp-badge--success">Active</span>
           {% else %}
           <span class="rp-badge rp-badge--muted">Inactive</span>
@@ -109,17 +104,17 @@
         </td>
         <td class="text-center">
           <div class="d-flex justify-content-center gap-1">
-            <a href="{% url 'teams:detail' team.pk %}"
+            <a href="{% url 'skills:detail' skill.pk %}"
                class="btn btn-ghost-icon" title="View">
               <i class="bi bi-eye"></i>
             </a>
-            <a href="{% url 'teams:edit' team.pk %}"
+            <a href="{% url 'skills:edit' skill.pk %}"
                class="btn btn-ghost-icon" title="Edit">
               <i class="bi bi-pencil"></i>
             </a>
             <button class="btn btn-ghost-icon btn-ghost-icon--danger"
                     title="Delete"
-                    onclick="confirmDelete({{ team.id }}, '{{ team.name|escapejs }}')">
+                    onclick="confirmDelete({{ skill.id }}, '{{ skill.skill|escapejs }}', '/api/v1/skills/{{ skill.id }}/', '/skills/')">
               <i class="bi bi-trash"></i>
             </button>
           </div>
@@ -128,8 +123,9 @@
       {% empty %}
       <tr>
         <td colspan="6" class="text-center py-5 text-secondary">
-          <i class="bi bi-people display-6 d-block mb-2 opacity-25"></i>
-          No teams found. <a href="{% url 'teams:create' %}">Create the first one</a>.
+          <i class="bi bi-puzzle display-6 d-block mb-2 opacity-25"></i>
+          No skills configured yet.
+          <a href="{% url 'skills:create' %}">Add the first skill</a>.
         </td>
       </tr>
       {% endfor %}
@@ -142,7 +138,7 @@
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content rp-modal">
       <div class="modal-header border-0 pb-0">
-        <h5 class="modal-title">Delete team?</h5>
+        <h5 class="modal-title">Delete skill?</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -152,12 +148,10 @@
         </p>
       </div>
       <div class="modal-footer border-0 pt-0">
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-          Cancel
-        </button>
-        <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-btn">
-          Delete
-        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-btn">Delete</button>
       </div>
     </div>
   </div>
@@ -166,5 +160,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/teams.js' %}"></script>
+<script src="{% static 'js/skills.js' %}"></script>
 {% endblock %}

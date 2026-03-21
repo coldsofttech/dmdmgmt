@@ -5,11 +5,17 @@ from .models import Team
 class TeamForm(forms.ModelForm):
     class Meta:
         model  = Team
-        fields = ['name', 'is_active']
+        fields = ['name', 'description', 'is_active']
         widgets = {
             'name': forms.TextInput(attrs={
                 'placeholder': 'e.g. Platform Engineering',
                 'autocomplete': 'off',
+                'style': 'text-transform:uppercase; font-family: var(--font-mono, monospace);',
+                'maxlength': 120,
+            }),
+            'description': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'What does this team own or focus on?'
             }),
         }
         error_messages = {
@@ -34,6 +40,9 @@ class TeamForm(forms.ModelForm):
                 'Please choose a different name.'
             )
         return name
+    
+    def clean_description(self):
+        return self.cleaned_data.get('description', '').strip()
 
     def clean(self):
         cleaned = super().clean()

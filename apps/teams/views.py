@@ -3,6 +3,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DetailView
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse_lazy
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from .services import TeamService
 from .forms import TeamForm
 
@@ -25,9 +26,13 @@ class TeamCreateView(CreateView):
     # success_url   = reverse_lazy('teams:list')
 
     def form_valid(self, form):
-        team = TeamService.create_team(form.cleaned_data)
-        messages.success(self.request, f'Team "{team.name}" created.')
-        return HttpResponseRedirect(reverse_lazy('teams:list'))
+        try:
+            team = TeamService.create_team(form.cleaned_data)
+            messages.success(self.request, f'Team "{team.name}" created.')
+            return HttpResponseRedirect(reverse_lazy('teams:list'))
+        except ValidationError as exc:
+            form.add_error('team', exc.message)
+            return self.form_invalid(form)
         # TeamService.create_team(form.cleaned_data)
         # messages.success(self.request, f'Team "{form.cleaned_data["name"]}" created.')
         # return super().form_valid(form)
@@ -52,9 +57,13 @@ class TeamUpdateView(UpdateView):
         return ctx
 
     def form_valid(self, form):
-        team = TeamService.update_team(self.kwargs['pk'], form.cleaned_data)
-        messages.success(self.request, f'Team "{team.name}" updated.')
-        return HttpResponseRedirect(reverse_lazy('teams:list'))
+        try:
+            team = TeamService.update_team(self.kwargs['pk'], form.cleaned_data)
+            messages.success(self.request, f'Team "{team.name}" updated successfully.')
+            return HttpResponseRedirect(reverse_lazy('teams:list'))
+        except ValidationError as exc:
+            form.add_error('team', exc.message)
+            return self.form_invalid(form)
         # TeamService.update_team(self.kwargs['pk'], form.cleaned_data)
         # messages.success(self.request, f'Team "{form.cleaned_data["name"]}" updated.')
         # return super().form_valid(form)
