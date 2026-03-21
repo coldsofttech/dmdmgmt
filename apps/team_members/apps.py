@@ -1,0 +1,7 @@
+from django.apps import AppConfig
+
+
+class TeamMembersConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name  = 'apps.team_members'
+    label = 'team_members'

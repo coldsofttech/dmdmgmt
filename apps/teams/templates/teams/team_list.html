@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load teams_extras %}
 
 {% block title %}Teams — Demand Management{% endblock %}
 
@@ -45,8 +46,15 @@
   <div class="col-6 col-md-3">
     <div class="rp-stat-card">
       <span class="rp-stat-label">Total Team Members</span>
+      <span class="rp-stat-value">{{ total_members }}</span>
       <!-- <span class="rp-stat-value">{{ total_capacity }}</span> -->
-      <span class="rp-stat-value">0</span>
+      <!-- <span class="rp-stat-value">0</span> -->
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Unassigned</span>
+      <span class="rp-stat-value">{{ unassigned_members }}</span>
     </div>
   </div>
 </div>
@@ -99,7 +107,12 @@
           <span class="rp-truncate">{{ team.description }}</span>
         </td>
         <!-- <td class="text-center fw-500">{{ team.capacity }}</td> -->
-        <td class="text-center fw-500">0</td>
+        <!-- <td class="text-center fw-500">0</td> -->
+        <td class="text-center">
+          {% with count=member_counts|get_item:team.pk %}
+          <span class="fw-500">{{ count|default:"0" }}</span>
+          {% endwith %}
+        </td>
         <td class="text-center">
           {% if team.is_active %}
           <span class="rp-badge rp-badge--success">Active</span>

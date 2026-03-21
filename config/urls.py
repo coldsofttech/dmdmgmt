@@ -20,17 +20,27 @@ from rest_framework.routers import DefaultRouter
 from apps.teams.api_views import TeamViewSet
 from apps.skills.api_views import SkillViewSet
 from apps.configurations.api_views import ConfigurationViewSet
+from apps.team_members.api_views import TeamMemberViewSet
 
 router = DefaultRouter()
 router.register(r'teams', TeamViewSet, basename='team')
 router.register(r'skills', SkillViewSet, basename='skill')
 router.register(r'configs', ConfigurationViewSet, basename='configuration')
+router.register(r'members', TeamMemberViewSet,    basename='team-member')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+
+    # REST API
+    path('api/v1/', include(router.urls)),
+
+    # Manage
     path('teams/', include('apps.teams.urls')),
+    path('members/', include('apps.team_members.urls')),
+
+    # Config / Settings
     path('settings/skills/', include('apps.skills.urls')),
     path('settings/config/', include('apps.configurations.urls')),
-    path('api/v1/', include(router.urls)),
+    
     path('', include('apps.teams.urls'))
 ]

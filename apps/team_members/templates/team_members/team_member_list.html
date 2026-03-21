@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Team Members — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-start justify-content-between flex-wrap gap-3">
+  <div>
+    <h1 class="rp-page-title">Team Members</h1>
+    <p class="rp-page-subtitle">Engineers, Lead Engineers and Architects across all teams</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'team_members:create' %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Add Member
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats row -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Total Members</span>
+      <span class="rp-stat-value">{{ total_count }}</span>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Active</span>
+      <span class="rp-stat-value">{{ active_count }}</span>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Employees</span>
+      <span class="rp-stat-value">{{ employee_count }}</span>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Contractors</span>
+      <span class="rp-stat-value">{{ contractor_count }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="rp-toolbar d-flex gap-2 mb-3 flex-wrap">
+  <div class="rp-search" style="flex:1;min-width:200px">
+    <i class="bi bi-search rp-search-icon"></i>
+    <input type="text" id="member-search" class="form-control rp-search-input"
+           placeholder="Search by name…" />
+  </div>
+
+  <select id="team-filter" class="form-select rp-select" style="max-width:180px"
+          onchange="filterMemberTable()">
+    <option value="">All teams</option>
+    {# ── Unassigned option — matches rows where data-team="" ── #}
+    <option value="__unassigned__">Unassigned</option>
+    {% for team in teams %}
+    <option value="{{ team.name|lower }}">{{ team.name }}</option>
+    {% endfor %}
+  </select>
+
+  <select id="role-filter" class="form-select rp-select" style="max-width:160px"
+          onchange="filterMemberTable()">
+    <option value="">All roles</option>
+    {% for val, label in roles %}
+    <option value="{{ val|lower }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+
+  <select id="location-filter" class="form-select rp-select" style="max-width:140px"
+          onchange="filterMemberTable()">
+    <option value="">All locations</option>
+    <option value="onsite">Onsite</option>
+    <option value="offshore">Offshore</option>
+  </select>
+
+  <select id="status-filter" class="form-select rp-select" style="max-width:140px"
+          onchange="filterMemberTable()">
+    <option value="">All statuses</option>
+    <option value="active">Active</option>
+    <option value="inactive">Inactive</option>
+  </select>
+</div>
+
+<!-- Table -->
+<div class="rp-table-wrap">
+  <table class="table rp-table" id="members-table">
+    <thead>
+      <tr>
+        <th class="sortable" onclick="sortMemberTable(0)">
+          Name <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        </th>
+        <th class="sortable" onclick="sortMemberTable(1)">
+          Role <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        </th>
+        <th class="sortable" onclick="sortMemberTable(2)">
+          Team <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        </th>
+        <th>Skills</th>
+        <th class="text-center sortable" onclick="sortMemberTable(4)">
+          Location <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        </th>
+        <th class="text-center">Type</th>
+        <th class="text-center">Status</th>
+        <th class="text-center">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for member in members %}
+      <tr data-member-id="{{ member.id }}"
+          data-name="{{ member.display_name|lower }}"
+          data-role="{{ member.role|lower }}"
+          data-team="{% if member.team %}{{ member.team.name|lower }}{% else %}__unassigned__{% endif %}"
+          data-location="{{ member.location|lower }}"
+          data-status="{% if member.is_active %}active{% else %}inactive{% endif %}">
+
+        <td>
+          <a href="{% url 'team_members:detail' member.pk %}" class="rp-link fw-500">
+            {{ member.display_name }}
+          </a>
+          <div class="text-secondary" style="font-size:12px">
+            {{ member.get_employee_type_display }}
+          </div>
+        </td>
+
+        <td>
+          <span class="rp-badge-role rp-badge-role--{{ member.role|lower }}">
+            {{ member.get_role_display }}
+          </span>
+        </td>
+
+        <td>
+          {% if member.team %}
+          <span class="rp-tag">{{ member.team.name }}</span>
+          {% else %}
+          <span class="rp-badge rp-badge--muted">Unassigned</span>
+          {% endif %}
+        </td>
+
+        <td>
+          <div class="d-flex flex-wrap gap-1">
+            {% for skill in member.skills.all %}
+            <span class="rp-code" style="font-size:11px">{{ skill.skill }}</span>
+            {% empty %}
+            <span class="text-secondary" style="font-size:12px">—</span>
+            {% endfor %}
+          </div>
+        </td>
+
+        <td class="text-center">
+          {% if member.location == 'ONSITE' %}
+          <span class="rp-badge rp-badge--success">Onsite</span>
+          {% else %}
+          <span class="rp-badge rp-badge--info">Offshore</span>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          <span class="rp-badge {% if member.employee_type == 'CONTRACTOR' %}rp-badge--warning{% else %}rp-badge--muted{% endif %}">
+            {{ member.get_employee_type_display }}
+          </span>
+        </td>
+
+        <td class="text-center">
+          {% if member.is_active %}
+          <span class="rp-badge rp-badge--success">Active</span>
+          {% else %}
+          <span class="rp-badge rp-badge--muted">Inactive</span>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          <div class="d-flex justify-content-center gap-1">
+            <a href="{% url 'team_members:detail' member.pk %}"
+               class="btn btn-ghost-icon" title="View">
+              <i class="bi bi-eye"></i>
+            </a>
+            <a href="{% url 'team_members:edit' member.pk %}"
+               class="btn btn-ghost-icon" title="Edit">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <button class="btn btn-ghost-icon" title="Move team"
+                    onclick="openMoveModal({{ member.id }}, '{{ member.display_name|escapejs }}', '{{ member.team.pk|default:'' }}')">
+              <i class="bi bi-arrow-left-right"></i>
+            </button>
+            <button class="btn btn-ghost-icon btn-ghost-icon--danger" title="Delete"
+                    onclick="confirmDelete(
+                      {{ member.id }},
+                      '{{ member.display_name|escapejs }}',
+                      '/api/v1/members/{{ member.id }}/',
+                      '/members/'
+                    )">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="8" class="text-center py-5 text-secondary">
+          <i class="bi bi-people display-6 d-block mb-2 opacity-25"></i>
+          No team members yet.
+          <a href="{% url 'team_members:create' %}">Add the first member</a>.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Move team modal -->
+<div class="modal fade" id="moveModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Move <span id="move-member-name"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="move-form" method="post">
+        {% csrf_token %}
+        <div class="modal-body">
+          <p class="text-secondary mb-3" style="font-size:13px">
+            Select the destination team and the effective date of the move.
+          </p>
+          <div class="rp-field mb-3">
+            <label class="rp-label">New team</label>
+            <select name="to_team" class="form-select rp-select" id="move-to-team">
+              <option value="">— Unassign from current team —</option>
+              {% for team in teams %}
+              <option value="{{ team.pk }}">{{ team.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="rp-field mb-3">
+            <label class="rp-label">Effective date <span class="rp-required">*</span></label>
+            <input type="date" name="moved_on" id="move-date"
+                   class="form-control rp-input" required />
+          </div>
+          <div class="rp-field">
+            <label class="rp-label">Reason / note</label>
+            <textarea name="note" rows="2"
+                      class="form-control rp-input"
+                      placeholder="Optional reason for the move"></textarea>
+          </div>
+          <div id="move-error" class="alert alert-danger mt-3 d-none"></div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary" id="move-submit-btn">
+            <i class="bi bi-arrow-left-right me-1"></i>Confirm move
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete member?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-team-name"></strong> will be permanently removed
+          along with their team history.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/team_members.js' %}"></script>
+{% endblock %}

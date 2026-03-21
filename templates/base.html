@@ -45,8 +45,8 @@
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="#">
-            <i class="bi bi-person-badge me-1"></i>Engineers
+          <a class="nav-link {% if request.resolver_match.app_name == 'team_members' %}active{% endif %}" href="{% url 'team_members:list' %}">
+            <i class="bi bi-person-badge me-1"></i>Members
           </a>
         </li>
         <li class="nav-item">
@@ -84,8 +84,8 @@
       <a href="{% url 'teams:list' %}" class="rp-sidebar-link {% if request.resolver_match.app_name == 'teams' %}active{% endif %}">
         <i class="bi bi-people"></i> Teams
       </a>
-      <a href="#" class="rp-sidebar-link">
-        <i class="bi bi-person-badge"></i> Engineers
+      <a href="{% url 'team_members:list' %}" class="rp-sidebar-link {% if request.resolver_match.app_name == 'team_members' %}active{% endif %}">
+        <i class="bi bi-person-badge"></i> Members
       </a>
       <a href="#" class="rp-sidebar-link">
         <i class="bi bi-kanban"></i> Projects

@@ -38,7 +38,15 @@
       <dl class="rp-meta-list">
         <dt>Total Team Members</dt>
         <!-- <dd>{{ team.capacity }} engineers</dd> -->
-        <dd>0</dd>
+        <!-- <dd>0</dd> -->
+        <dd>
+          <span class="fw-500">{{ member_count }}</span>
+          {% if active_member_count != member_count %}
+          <span class="text-secondary" style="font-size:12px">
+            ({{ active_member_count }} active)
+          </span>
+          {% endif %}
+        </dd>
         <dt>Description</dt>
         <dd>{{ team.description|default:"No description provided." }}</dd>
         <dt>Created</dt>
@@ -57,18 +65,102 @@
     </div>
   </div>
 
-  <!-- Engineers table (placeholder) -->
+  <!-- Members table — full width -->
   <div class="col-12">
     <div class="rp-card">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h6 class="rp-card-heading mb-0">Engineers in this team</h6>
-        <a href="#" class="btn btn-sm btn-outline-primary">
-          <i class="bi bi-plus me-1"></i>Add engineer
+        <h6 class="rp-card-heading mb-0">
+          Members in this team
+          {% if member_count %}
+          <span class="rp-badge rp-badge--muted ms-2">{{ member_count }}</span>
+          {% endif %}
+        </h6>
+        <a href="{% url 'team_members:create' %}" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-plus me-1"></i>Add member
         </a>
       </div>
-      <p class="text-secondary">
-        Engineers module not yet implemented. Engineers will appear here once added.
+ 
+      {% if team_members %}
+      <div class="rp-table-wrap" style="box-shadow:none;border:none">
+        <table class="table rp-table mb-0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Skills</th>
+              <th class="text-center">Location</th>
+              <th class="text-center">Type</th>
+              <th>Start date</th>
+              <th class="text-center">Status</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for member in team_members %}
+            <tr>
+              <td>
+                <a href="{% url 'team_members:detail' member.pk %}" class="rp-link fw-500">
+                  {{ member.display_name }}
+                </a>
+              </td>
+              <td>
+                <span class="rp-badge-role rp-badge-role--{{ member.role|lower }}">
+                  {{ member.get_role_display }}
+                </span>
+              </td>
+              <td>
+                <div class="d-flex flex-wrap gap-1">
+                  {% for skill in member.skills.all %}
+                  <span class="rp-code" style="font-size:11px">{{ skill.skill }}</span>
+                  {% empty %}
+                  <span class="text-secondary" style="font-size:12px">—</span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td class="text-center">
+                {% if member.location == 'ONSITE' %}
+                <span class="rp-badge rp-badge--success">Onsite</span>
+                {% else %}
+                <span class="rp-badge rp-badge--info">Offshore</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <span class="rp-badge {% if member.employee_type == 'CONTRACTOR' %}rp-badge--warning{% else %}rp-badge--muted{% endif %}">
+                  {{ member.get_employee_type_display }}
+                </span>
+              </td>
+              <td style="font-size:13px">{{ member.start_date|date:"d M Y" }}</td>
+              <td class="text-center">
+                {% if member.is_active %}
+                <span class="rp-badge rp-badge--success">Active</span>
+                {% else %}
+                <span class="rp-badge rp-badge--muted">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{% url 'team_members:detail' member.pk %}"
+                     class="btn btn-ghost-icon" title="View">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <a href="{% url 'team_members:edit' member.pk %}"
+                     class="btn btn-ghost-icon" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-secondary mb-0" style="font-size:13px">
+        No members assigned to this team yet.
+        <a href="{% url 'team_members:create' %}">Add one now</a>.
       </p>
+      {% endif %}
+ 
     </div>
   </div>
 
@@ -81,7 +173,7 @@
     labels: ['Sprint 1','Sprint 2','Sprint 3','Sprint 4','Sprint 5','Sprint 6'],
     datasets: [{
       label: 'Allocated',
-      data: [0, 0, 0, 0, 0, 0],   // populated from API in production
+      data: [0, 0, 0, 0, 0, 0],
       backgroundColor: 'rgba(99,102,241,0.15)',
       borderColor: '#6366f1',
       borderWidth: 2,
@@ -89,10 +181,10 @@
       tension: 0.35,
     }, {
       label: 'Capacity',
-      data: Array(6).fill({{ team.capacity }}),
+      data: Array(6).fill({{ member_count }}),
       borderColor: '#e2e8f0',
       borderWidth: 1.5,
-      borderDash: [5,4],
+      borderDash: [5, 4],
       fill: false,
       pointRadius: 0,
     }]

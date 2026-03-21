@@ -578,6 +578,80 @@ a:hover { text-decoration: underline; }
   gap:        4px;
 }
 
+/* =========================================================
+   Append these rules to static/css/main.css
+   ========================================================= */
+
+/* ── Role badges ──────────────────────────────────────── */
+.rp-badge-role {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.rp-badge-role--engineer {
+  background: #eff6ff;
+  color:      #1d4ed8;
+}
+.rp-badge-role--lead_engineer {
+  background: #f5f3ff;
+  color:      #6d28d9;
+}
+.rp-badge-role--architect {
+  background: #fff7ed;
+  color:      #c2410c;
+}
+
+/* ── Info badge (offshore) ────────────────────────────── */
+.rp-badge--info {
+  background: #eff6ff;
+  color:      #1d4ed8;
+}
+
+/* ── Team history timeline ────────────────────────────── */
+.rp-timeline {
+  position: relative;
+  padding-left: 20px;
+}
+.rp-timeline::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--color-border);
+}
+.rp-timeline-item {
+  position: relative;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 14px;
+}
+.rp-timeline-item:last-child {
+  margin-bottom: 0;
+}
+.rp-timeline-dot {
+  position: absolute;
+  left: -18px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid var(--color-surface);
+  flex-shrink: 0;
+}
+.rp-timeline-body {
+  flex: 1;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-sm);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+
 /* ── Utilities ────────────────────────────────────────── */
 .fw-500 { font-weight: 500; }
 .fw-600 { font-weight: 600; }
