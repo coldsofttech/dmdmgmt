@@ -19,15 +19,18 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from apps.teams.api_views import TeamViewSet
 from apps.skills.api_views import SkillViewSet
+from apps.configurations.api_views import ConfigurationViewSet
 
 router = DefaultRouter()
 router.register(r'teams', TeamViewSet, basename='team')
 router.register(r'skills', SkillViewSet, basename='skill')
+router.register(r'configs', ConfigurationViewSet, basename='configuration')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('teams/', include('apps.teams.urls')),
-    path('skills/', include('apps.skills.urls')),
+    path('settings/skills/', include('apps.skills.urls')),
+    path('settings/config/', include('apps.configurations.urls')),
     path('api/v1/', include(router.urls)),
     path('', include('apps.teams.urls'))
 ]

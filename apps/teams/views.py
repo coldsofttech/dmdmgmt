@@ -28,7 +28,7 @@ class TeamCreateView(CreateView):
     def form_valid(self, form):
         try:
             team = TeamService.create_team(form.cleaned_data)
-            messages.success(self.request, f'Team "{team.name}" created.')
+            messages.success(self.request, f'Team "{team.name}" created successfully.')
             return HttpResponseRedirect(reverse_lazy('teams:list'))
         except ValidationError as exc:
             form.add_error('team', exc.message)

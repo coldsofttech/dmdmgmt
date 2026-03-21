@@ -108,6 +108,10 @@
       <a href="{% url 'skills:list' %}" class="rp-sidebar-link {% if request.resolver_match.app_name == 'skills' %}active{% endif %}">
         <i class="bi bi-puzzle"></i> Skills
       </a>
+      <a href="{% url 'configurations:list' %}"
+        class="rp-sidebar-link {% if request.resolver_match.app_name == 'configurations' %}active{% endif %}">
+        <i class="bi bi-sliders"></i> Configurations
+      </a>
     </div>
     <div class="rp-sidebar-section mt-auto">
       <p class="rp-sidebar-label">Tools</p>
