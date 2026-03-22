@@ -755,6 +755,47 @@ a:hover { text-decoration: underline; }
   color:        #991b1b;
 }
 
+/* ── Holiday date badge ──────────────────────────────────────
+   Used in holiday_detail.html to display the date in a
+   visually distinct pill (similar to the FY value pills).
+   ──────────────────────────────────────────────────────────── */
+.rp-holiday-date-pill {
+  display:         inline-flex;
+  align-items:     center;
+  gap:             6px;
+  padding:         4px 12px;
+  border-radius:   8px;
+  font-size:       14px;
+  font-weight:     500;
+  background:      #fff7ed;
+  border:          1px solid #fed7aa;
+  color:           #9a3412;
+  font-family:     var(--font-mono, 'DM Mono', monospace);
+  white-space:     nowrap;
+}
+ 
+/* ── Highlighted "current" holiday row ───────────────────────
+   Applied in holiday_detail.html's "other holidays" table
+   to mark the record currently being viewed.
+   Uses Bootstrap's table-active as a base; this just
+   reinforces the left border to make it stand out more.
+   ──────────────────────────────────────────────────────────── */
+#holidays-table tbody tr.table-active td:first-child {
+  border-left: 3px solid var(--color-primary, #6366f1);
+  padding-left: calc(0.75rem - 3px); /* compensate for the border */
+}
+ 
+/* ── Holiday count badge on FY detail card header ────────────
+   Small, sits inline with the card heading.
+   Reuses existing .rp-badge--muted but this rule ensures
+   the heading + badge stay vertically centred in the flex row.
+   ──────────────────────────────────────────────────────────── */
+.rp-card-heading .rp-badge {
+  vertical-align: middle;
+  position:       relative;
+  top:            -1px;
+}
+
 /* ── Utilities ────────────────────────────────────────── */
 .fw-500 { font-weight: 500; }
 .fw-600 { font-weight: 600; }

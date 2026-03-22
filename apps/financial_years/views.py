@@ -40,7 +40,14 @@ class FinancialYearDetailView(View):
 
     def get(self, request, pk):
         fy = FinancialYearService.get_financial_year(pk)
-        return render(request, self.template_name, {'fy': fy})
+ 
+        from apps.holidays.services import HolidayService
+        holidays = HolidayService.list_holidays(financial_year_id=pk)
+ 
+        return render(request, self.template_name, {
+            'fy':       fy,
+            'holidays': holidays,
+        })
 
 
 class FinancialYearCreateView(View):

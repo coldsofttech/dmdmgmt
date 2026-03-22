@@ -23,6 +23,7 @@ from apps.configurations.api_views import ConfigurationViewSet
 from apps.team_members.api_views import TeamMemberViewSet
 from apps.projects.api_views import ProjectViewSet
 from apps.financial_years.api_views import FinancialYearViewSet
+from apps.holidays.api_views import HolidayViewSet
 
 router = DefaultRouter()
 router.register(r'teams', TeamViewSet, basename='team')
@@ -31,6 +32,7 @@ router.register(r'configs', ConfigurationViewSet, basename='configuration')
 router.register(r'members', TeamMemberViewSet, basename='team-member')
 router.register(r'projects', ProjectViewSet, basename='project')
 router.register(r'financial-years', FinancialYearViewSet, basename='financial-year')
+router.register(r'holidays', HolidayViewSet, basename='holiday')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -43,6 +45,7 @@ urlpatterns = [
     path('members/', include('apps.team_members.urls')),
     path('projects/', include('apps.projects.urls')),
     path('financial-years/', include('apps.financial_years.urls')),
+    path('holidays/', include('apps.holidays.urls')),
 
     # Config / Settings
     path('settings/skills/', include('apps.skills.urls')),

@@ -120,6 +120,10 @@
          class="rp-sidebar-link {% if request.resolver_match.app_name == 'financial_years' %}active{% endif %}">
         <i class="bi bi-calendar3"></i> Financial Years
       </a>
+      <a href="{% url 'holidays:list' %}"
+         class="rp-sidebar-link {% if request.resolver_match.app_name == 'holidays' %}active{% endif %}">
+        <i class="bi bi-calendar-heart"></i> Holidays
+      </a>
       <a href="#" class="rp-sidebar-link">
         <i class="bi bi-wallet2"></i> Budgets
       </a>

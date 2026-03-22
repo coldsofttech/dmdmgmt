@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ holiday }} — Holidays — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'financial_years:detail' holiday.financial_year.pk %}"
+       class="btn btn-ghost-icon" title="Back to {{ holiday.financial_year.long_fy }}">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h1 class="rp-page-title d-flex align-items-center gap-2 flex-wrap">
+        {{ holiday.holiday_date|date:"D, d M Y" }}
+        <span class="rp-code">{{ holiday.financial_year.short_fy }}</span>
+      </h1>
+      <p class="rp-page-subtitle">
+        {{ holiday.note|default:"No description" }}
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'holidays:edit' holiday.pk %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-pencil me-1"></i>Edit
+    </a>
+    <button class="btn btn-outline-danger btn-sm"
+            onclick="deleteHoliday({{ holiday.pk }}, '{{ holiday|escapejs }}')">
+      <i class="bi bi-trash me-1"></i>Delete
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  <!-- Left: Holiday details card -->
+  <div class="col-lg-4">
+    <div class="rp-card">
+      <h6 class="rp-card-heading">Holiday details</h6>
+      <dl class="rp-meta-list">
+
+        <dt>Date</dt>
+        <dd>
+          <span class="fw-500">{{ holiday.holiday_date|date:"D, d M Y" }}</span>
+        </dd>
+
+        <dt>Note</dt>
+        <dd>{{ holiday.note|default:"—" }}</dd>
+
+        <dt>Financial year</dt>
+        <dd>
+          <a href="{% url 'financial_years:detail' holiday.financial_year.pk %}"
+             class="rp-link d-inline-flex align-items-center gap-2">
+            <span class="rp-value-pill"
+                  style="font-size:13px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8">
+              {{ holiday.financial_year.long_fy }}
+            </span>
+          </a>
+        </dd>
+
+        <dt>FY period</dt>
+        <dd class="text-secondary" style="font-size:13px">
+          {{ holiday.financial_year.start_date|date:"d M Y" }}
+          →
+          {{ holiday.financial_year.end_date|date:"d M Y" }}
+        </dd>
+
+        <dt>FY status</dt>
+        <dd>
+          {% if holiday.financial_year.is_active %}
+          <span class="rp-badge rp-badge--success">Active</span>
+          {% else %}
+          <span class="rp-badge rp-badge--muted">Inactive</span>
+          {% endif %}
+        </dd>
+
+        <dt>Created</dt>
+        <dd>{{ holiday.created_at|date:"d M Y, H:i" }}</dd>
+
+        <dt>Last updated</dt>
+        <dd>{{ holiday.updated_at|date:"d M Y, H:i" }}</dd>
+
+      </dl>
+    </div>
+  </div>
+
+  <!-- Right: context — other holidays in same FY -->
+  <div class="col-lg-8">
+    <div class="rp-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="rp-card-heading mb-0">
+          Other holidays in {{ holiday.financial_year.long_fy }}
+          {% if other_holidays %}
+          <span class="rp-badge rp-badge--muted ms-2">{{ other_holidays|length }}</span>
+          {% endif %}
+        </h6>
+        <a href="{% url 'holidays:create' %}?fy={{ holiday.financial_year.pk }}"
+           class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-plus me-1"></i>Add holiday
+        </a>
+      </div>
+
+      {% if other_holidays %}
+      <div class="rp-table-wrap" style="box-shadow:none;border:none">
+        <table class="table rp-table mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Note</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in other_holidays %}
+            <tr class="{% if h.pk == holiday.pk %}table-active{% endif %}">
+              <td class="fw-500" style="white-space:nowrap">
+                {% if h.pk == holiday.pk %}
+                <i class="bi bi-arrow-right-short text-primary me-1"></i>
+                {% endif %}
+                {{ h.holiday_date|date:"D, d M Y" }}
+              </td>
+              <td class="text-secondary" style="font-size:13.5px">
+                {{ h.note|default:"—" }}
+              </td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{% url 'holidays:detail' h.pk %}"
+                     class="btn btn-ghost-icon" title="View">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <a href="{% url 'holidays:edit' h.pk %}"
+                     class="btn btn-ghost-icon" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-secondary mb-0" style="font-size:13px">
+        No other holidays in this financial year.
+      </p>
+      {% endif %}
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Delete confirm modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete holiday?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-holiday-name"></strong> will be permanently removed.
+          This cannot be undone.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/holidays.js' %}"></script>
+<script>
+  // After delete, redirect to the FY detail page
+  window._deleteRedirectUrl = "{% url 'financial_years:detail' holiday.financial_year.pk %}";
+</script>
+{% endblock %}

@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+  {% if is_create %}Add Holiday{% else %}Edit Holiday{% endif %} — Demand Management
+{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center gap-3">
+  {% if locked_fy %}
+  <a href="{% url 'financial_years:detail' locked_fy.pk %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  {% elif not is_create %}
+  <a href="{% url 'financial_years:detail' holiday.financial_year.pk %}"
+     class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  {% else %}
+  <a href="{% url 'holidays:list' %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  {% endif %}
+  <div>
+    <h1 class="rp-page-title">
+      {% if is_create %}Add Holiday{% else %}Edit Holiday{% endif %}
+    </h1>
+    {% if locked_fy %}
+    <p class="rp-page-subtitle">
+      Adding to <span class="rp-code">{{ locked_fy.short_fy }}</span>
+      — {{ locked_fy.start_date|date:"d M Y" }} → {{ locked_fy.end_date|date:"d M Y" }}
+    </p>
+    {% elif not is_create %}
+    <p class="rp-page-subtitle">
+      Editing holiday in
+      <span class="rp-code">{{ holiday.financial_year.short_fy }}</span>
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-5">
+    <div class="rp-card">
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% if locked_fy %}
+        <input type="hidden" name="_fy_pk" value="{{ locked_fy.pk }}">
+        {% endif %}
+
+        <!-- Financial Year -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.financial_year.id_for_label }}">
+            Financial year <span class="rp-required">*</span>
+          </label>
+
+          {% if locked_fy %}
+          <div class="rp-locked-field d-flex align-items-center gap-2">
+            <span class="rp-value-pill"
+                  style="font-size:14px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8">
+              {{ locked_fy.long_fy }}
+            </span>
+            <span class="rp-badge rp-badge--muted">
+              <i class="bi bi-lock-fill me-1"></i>Fixed
+            </span>
+          </div>
+          <p class="rp-hint mt-1">
+            {{ locked_fy.start_date|date:"d M Y" }} → {{ locked_fy.end_date|date:"d M Y" }}
+          </p>
+
+          {% else %}
+          <select id="{{ form.financial_year.id_for_label }}"
+                  name="{{ form.financial_year.html_name }}"
+                  class="form-select rp-select {% if form.financial_year.errors %}is-invalid{% endif %}">
+            <option value="">— Select financial year —</option>
+            {% for fy in form.fields.financial_year.queryset %}
+            <option value="{{ fy.pk }}"
+              {% if form.financial_year.value|stringformat:"s" == fy.pk|stringformat:"s" %}
+              selected{% endif %}>
+              {{ fy.long_fy }}{% if fy.is_active %} (Active){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          {% if form.financial_year.errors %}
+          <div class="invalid-feedback d-block">{{ form.financial_year.errors.0 }}</div>
+          {% endif %}
+          {% endif %}
+        </div>
+
+        <!-- Holiday date -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.holiday_date.id_for_label }}">
+            Holiday date <span class="rp-required">*</span>
+          </label>
+          <input type="date"
+                 id="{{ form.holiday_date.id_for_label }}"
+                 name="{{ form.holiday_date.html_name }}"
+                 value="{{ form.holiday_date.value|date:'Y-m-d'|default:'' }}"
+                 class="form-control rp-input {% if form.holiday_date.errors %}is-invalid{% endif %}" />
+          {% if form.holiday_date.errors %}
+          <div class="invalid-feedback d-block">{{ form.holiday_date.errors.0 }}</div>
+          {% endif %}
+          {% if locked_fy %}
+          <p class="rp-hint mt-1">
+            Must be between {{ locked_fy.start_date|date:"d M Y" }}
+            and {{ locked_fy.end_date|date:"d M Y" }}.
+          </p>
+          {% endif %}
+        </div>
+
+        <!-- Note -->
+        <div class="rp-field mb-5">
+          <label class="rp-label" for="{{ form.note.id_for_label }}">Note</label>
+          <input type="text"
+                 id="{{ form.note.id_for_label }}"
+                 name="{{ form.note.html_name }}"
+                 value="{{ form.note.value|default:'' }}"
+                 class="form-control rp-input"
+                 placeholder="e.g. Christmas Day" />
+          <p class="rp-hint mt-1">Short description of the holiday.</p>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          {% for err in form.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>
+            {% if is_create %}Add holiday{% else %}Save changes{% endif %}
+          </button>
+
+          {% if locked_fy %}
+          <a href="{% url 'financial_years:detail' locked_fy.pk %}"
+             class="btn btn-outline-secondary">Cancel</a>
+
+          {% elif not is_create %}
+          <a href="{% url 'financial_years:detail' holiday.financial_year.pk %}"
+             class="btn btn-outline-secondary">Cancel</a>
+
+          <button type="button"
+                  class="btn btn-outline-danger ms-auto"
+                  onclick="deleteHoliday({{ holiday.pk }}, '{{ holiday|escapejs }}')">
+            <i class="bi bi-trash me-1"></i>Delete
+          </button>
+
+          {% else %}
+          <a href="{% url 'holidays:list' %}" class="btn btn-outline-secondary">Cancel</a>
+          {% endif %}
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- Tips panel -->
+  <div class="col-lg-4 offset-lg-1 mt-4 mt-lg-0">
+    <div class="rp-card rp-card--muted">
+      <h6 class="fw-600 mb-3"><i class="bi bi-info-circle me-2"></i>Tips</h6>
+      <ul class="rp-tip-list">
+        <li>The holiday date must fall within the selected financial year's start and end dates.</li>
+        <li>Each date can only appear once per financial year — duplicates are rejected.</li>
+        <li>The <strong>Note</strong> field is optional but helps identify the holiday at a glance (e.g. "Good Friday").</li>
+        <li>Holidays are used when calculating available working days for resourcing and capacity planning.</li>
+      </ul>
+    </div>
+    {% if not is_create %}
+    <div class="rp-card rp-card--muted mt-3">
+      <h6 class="fw-600 mb-2"><i class="bi bi-clock-history me-2"></i>Metadata</h6>
+      <dl class="rp-meta-list">
+        <dt>Created</dt><dd>{{ holiday.created_at|date:"d M Y, H:i" }}</dd>
+        <dt>Updated</dt><dd>{{ holiday.updated_at|date:"d M Y, H:i" }}</dd>
+      </dl>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% if not is_create %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete holiday?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-holiday-name"></strong> will be permanently removed.
+          This cannot be undone.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window._deleteRedirectUrl = "{% url 'financial_years:detail' holiday.financial_year.pk %}";
+</script>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/holidays.js' %}"></script>
+{% endblock %}
