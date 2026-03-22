@@ -214,6 +214,18 @@ class ProjectDetailView(DetailView):
         return ProjectService.get_project(pk)
  
     def _ctx(self, project):
+        project_budget = None
+        active_fy      = None
+        try:
+            from apps.budgets.services import BudgetService
+            active_fy = BudgetService.get_active_fy()
+            if active_fy:
+                project_budget = BudgetService.get_for_project_fy(
+                    project.pk, active_fy.pk
+                )
+        except Exception:
+            pass
+ 
         return {
             'project':          project,
             'comments':         ProjectService.get_comments(project.pk),
@@ -222,6 +234,8 @@ class ProjectDetailView(DetailView):
             'code_history':     ProjectService.get_code_history(project.pk),
             'estimate_history': ProjectService.get_estimate_history(project.pk),
             'day_price':        ProjectService.get_day_price(),
+            'project_budget':   project_budget,
+            'active_fy':        active_fy,
         }
  
     def get(self, request, pk):

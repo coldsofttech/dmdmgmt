@@ -48,7 +48,7 @@
     </div>
 
     <div class="rp-card mb-3">
-      <h6 class="rp-card-heading">Budgets</h6>
+      <h6 class="rp-card-heading">Project Code & Label</h6>
       <dl class="rp-meta-list">
         <dt>Label</dt>
         <dd>
@@ -164,6 +164,82 @@
           {% else %}—{% endif %}
         </dd>
       </dl>
+    </div>
+
+    <!-- Budget (active FY) -->
+    <div class="rp-card mb-3">
+      <h6 class="rp-card-heading d-flex align-items-center gap-2">
+        Budget
+        {% if active_fy %}
+        <span class="rp-code ms-1" style="font-size:11px">{{ active_fy.short_fy }}</span>
+        {% endif %}
+        {% if project_budget %}
+        <a href="{% url 'budgets:edit' project_budget.pk %}"
+           class="btn btn-ghost-icon ms-auto" style="width:22px;height:22px;font-size:12px"
+           title="Edit budget">
+          <i class="bi bi-pencil"></i>
+        </a>
+        {% endif %}
+      </h6>
+      {% if project_budget %}
+      <dl class="rp-meta-list">
+        <dt>Allocated</dt>
+        <dd>
+          {% if project_budget.budget_allocated is not None %}
+          <span class="rp-budget-amount">£{{ project_budget.budget_allocated|floatformat:2 }}</span>
+          {% else %}<span class="text-secondary">Not set</span>{% endif %}
+        </dd>
+        {% if project_budget.refined_budget is not None %}
+        <dt>Refined</dt>
+        <dd>
+          <span class="rp-budget-amount rp-budget-amount--refined">
+            £{{ project_budget.refined_budget|floatformat:2 }}
+          </span>
+        </dd>
+        {% endif %}
+        <dt>Estimates</dt>
+        <dd>
+          {% if project_budget.estimates is not None %}
+          <span class="rp-budget-amount">£{{ project_budget.estimates|floatformat:2 }}</span>
+          {% else %}<span class="text-secondary">—</span>{% endif %}
+        </dd>
+        <dt>Remaining</dt>
+        <dd>
+          {% if project_budget.remaining_budget is not None %}
+            {% if project_budget.is_over_budget %}
+            <span class="rp-budget-remaining rp-budget-remaining--over">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i>
+              £{{ project_budget.remaining_budget|floatformat:2 }}
+            </span>
+            {% elif project_budget.is_at_risk %}
+            <span class="rp-budget-remaining rp-budget-remaining--risk">
+              <i class="bi bi-exclamation-circle-fill me-1"></i>
+              £{{ project_budget.remaining_budget|floatformat:2 }}
+            </span>
+            {% else %}
+            <span class="rp-budget-remaining rp-budget-remaining--ok">
+              £{{ project_budget.remaining_budget|floatformat:2 }}
+            </span>
+            {% endif %}
+          {% else %}<span class="text-secondary">—</span>{% endif %}
+        </dd>
+      </dl>
+      <div class="mt-2">
+        <a href="{% url 'budgets:detail' project_budget.pk %}"
+           class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-eye me-1"></i>Full budget detail
+        </a>
+      </div>
+      {% else %}
+      <p class="text-secondary mb-2" style="font-size:13px">
+        No budget entry for
+        {% if active_fy %}{{ active_fy.long_fy }}{% else %}the active financial year{% endif %}.
+      </p>
+      <a href="{% url 'budgets:create' %}?project={{ project.pk }}"
+         class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-plus me-1"></i>Create budget entry
+      </a>
+      {% endif %}
     </div>
 
     <div class="rp-card mb-3">

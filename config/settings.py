@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'apps.financial_years',
     'apps.holidays',
     'apps.leaves',
+    'apps.budgets',
 ]
 
 MIDDLEWARE = [

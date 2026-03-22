@@ -198,6 +198,14 @@ class ProjectService:
         # Seed initial estimate history if estimates provided at creation
         if project.estimate_days is not None:
             _record_estimate_history(project, None, None, None, None)
+
+        try:
+            from apps.budgets.services import BudgetService
+            active_fy = BudgetService.get_active_fy()
+            if active_fy:
+                BudgetService.ensure_budget_for_project(project.pk, active_fy.pk)
+        except Exception:
+            pass
  
         return project
 

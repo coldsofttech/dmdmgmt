@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load static budget_filters %}
+
+{% block title %}Programme Budget Summary — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-start justify-content-between flex-wrap gap-3">
+  <div>
+    <h1 class="rp-page-title">Programme Budget Summary</h1>
+    <p class="rp-page-subtitle">Budget totals aggregated by programme</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'budgets:list' %}{% if selected_fy_pk %}?fy={{ selected_fy_pk }}{% endif %}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-list-ul me-1"></i>Project view
+    </a>
+    <a href="{% url 'budgets:create' %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Add Budget
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- FY filter -->
+<div class="rp-toolbar d-flex gap-2 mb-4 align-items-center">
+  <form method="get" class="d-flex gap-2">
+    <select name="fy" class="form-select rp-select" style="max-width:220px"
+            onchange="this.form.submit()">
+      <option value="">All financial years</option>
+      {% for fy in financial_years %}
+      <option value="{{ fy.pk }}"
+              {% if fy.pk|stringformat:"s" == selected_fy_pk %}selected{% endif %}>
+        {{ fy.long_fy }}{% if fy.is_active %} (Active){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    {% if selected_fy_pk %}
+    <a href="{% url 'budgets:programme_summary' %}"
+       class="btn btn-outline-secondary btn-sm align-self-center">
+      <i class="bi bi-x me-1"></i>Clear
+    </a>
+    {% endif %}
+  </form>
+</div>
+
+{% if programme_summary %}
+
+<!-- One card per programme -->
+{% for row in programme_summary %}
+<div class="rp-card mb-4">
+
+  <!-- Programme header with aggregated figures -->
+  <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-3">
+    <div>
+      <h5 class="fw-600 mb-0" style="font-size:16px">
+        {{ row.programme }}
+        <span class="rp-badge rp-badge--muted ms-2">
+          {{ row.project_count }} project{{ row.project_count|pluralize }}
+        </span>
+      </h5>
+    </div>
+
+    <div class="d-flex gap-4 flex-wrap">
+      <div class="text-end">
+        <div class="rp-stat-label">Allocated</div>
+        <div class="rp-budget-amount" style="font-size:15px">
+          {{ row.total_allocated|gbp }}
+        </div>
+      </div>
+      <div class="text-end">
+        <div class="rp-stat-label">Estimates</div>
+        <div class="rp-budget-amount" style="font-size:15px">
+          {{ row.total_estimates|gbp }}
+        </div>
+      </div>
+      <div class="text-end">
+        <div class="rp-stat-label">Remaining</div>
+        <div style="font-size:15px">
+          {% if row.total_remaining is not None %}
+            {% if row.total_remaining < 0 %}
+            <span class="rp-budget-remaining rp-budget-remaining--over">
+              <i class="bi bi-exclamation-triangle-fill" style="font-size:10px"></i>
+              {{ row.total_remaining|gbp }}
+            </span>
+            {% elif row.total_remaining == 0 %}
+            <span class="rp-budget-remaining rp-budget-remaining--ontrack">
+              <i class="bi bi-check-circle-fill" style="font-size:10px"></i>
+              {{ row.total_remaining|gbp }}
+            </span>
+            {% else %}
+            <span class="rp-budget-remaining rp-budget-remaining--atrisk">
+              <i class="bi bi-exclamation-circle-fill" style="font-size:10px"></i>
+              {{ row.total_remaining|gbp }}
+            </span>
+            {% endif %}
+          {% else %}
+          <span class="text-secondary">—</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project rows for this programme -->
+  <div class="rp-table-wrap" style="box-shadow:none;border:none">
+    <table class="table rp-table mb-0">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th class="text-end">Allocated</th>
+          <th class="text-end">Refined</th>
+          <th class="text-end">Active</th>
+          <th class="text-end">Estimates</th>
+          <th class="text-end">Remaining</th>
+          <th>FY</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in row.budgets %}
+        <tr>
+          <td>
+            <a href="{% url 'projects:detail' b.project.pk %}" class="rp-link fw-500">
+              {{ b.project.project_name }}
+            </a>
+            {% if b.project.project_code %}
+            <span class="rp-code ms-1" style="font-size:11px">{{ b.project.project_code }}</span>
+            {% endif %}
+          </td>
+
+          <td class="text-end">
+            <span class="rp-budget-amount">{{ b.budget_allocated|gbp }}</span>
+          </td>
+
+          <td class="text-end">
+            {% if b.refined_budget is not None %}
+            <span class="rp-budget-amount rp-budget-amount--refined">
+              {{ b.refined_budget|gbp }}
+            </span>
+            {% else %}
+            <span class="text-secondary">—</span>
+            {% endif %}
+          </td>
+
+          <td class="text-end">
+            <span class="rp-budget-amount" style="font-weight:500">
+              {{ b.active_budget|gbp }}
+            </span>
+          </td>
+
+          <td class="text-end">
+            <span class="rp-budget-amount">{{ b.estimates|gbp }}</span>
+          </td>
+
+          <td class="text-end">
+            {% if b.budget_status == 'default' or b.budget_status == 'unset' %}
+            <span class="rp-budget-remaining rp-budget-remaining--default">
+              {{ b.remaining_budget|gbp }}
+            </span>
+            {% elif b.budget_status == 'at_risk' %}
+            <span class="rp-budget-remaining rp-budget-remaining--atrisk">
+              <i class="bi bi-exclamation-circle-fill" style="font-size:10px"></i>
+              {{ b.remaining_budget|gbp }}
+            </span>
+            {% elif b.budget_status == 'on_track' %}
+            <span class="rp-budget-remaining rp-budget-remaining--ontrack">
+              <i class="bi bi-check-circle-fill" style="font-size:10px"></i>
+              {{ b.remaining_budget|gbp }}
+            </span>
+            {% elif b.budget_status == 'over' %}
+            <span class="rp-budget-remaining rp-budget-remaining--over">
+              <i class="bi bi-exclamation-triangle-fill" style="font-size:10px"></i>
+              {{ b.remaining_budget|gbp }}
+            </span>
+            {% else %}
+            <span class="text-secondary">—</span>
+            {% endif %}
+          </td>
+
+          <td>
+            <span class="rp-code" style="font-size:11px">{{ b.financial_year.short_fy }}</span>
+          </td>
+
+          <td class="text-center">
+            <div class="d-flex justify-content-center gap-1">
+              <a href="{% url 'budgets:detail' b.pk %}" class="btn btn-ghost-icon" title="View">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{% url 'budgets:edit' b.pk %}" class="btn btn-ghost-icon" title="Edit">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endfor %}
+
+{% else %}
+<div class="rp-card text-center py-5 text-secondary">
+  <i class="bi bi-cash-stack display-6 d-block mb-2 opacity-25"></i>
+  No budget data found.
+  <a href="{% url 'budgets:create' %}">Add the first entry</a>.
+</div>
+{% endif %}
+
+{% endblock %}
