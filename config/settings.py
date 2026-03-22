@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'apps.skills',
     'apps.configurations',
     'apps.team_members',
+    'apps.projects',
 ]
 
 MIDDLEWARE = [

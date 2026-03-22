@@ -11,6 +11,114 @@ CONFIGURATION_DEFAULTS = {
             'available capacity in sprint planning.'
         ),
     },
+    'PROJECT_SUB_STATUS_NEW': {
+        'label':       'Project sub-statuses for New',
+        'value':       'Not Started|Under Review|Estimates Issued Awaiting Approval|Estimates Approved Awaiting Start Date',
+        'description': (
+            'Pipe-separated sub-status options shown when a project '
+            'status is New. Edit the value to customise the list.'
+        ),
+    },
+    'PROJECT_SUB_STATUS_IN_PROGRESS': {
+        'label':       'Project sub-statuses for In Progress',
+        'value':       'In Progress',
+        'description': 'Pipe-separated sub-status options for In Progress projects.',
+    },
+    'PROJECT_SUB_STATUS_COMPLETED': {
+        'label':       'Project sub-statuses for Completed',
+        'value':       'Completed',
+        'description': 'Pipe-separated sub-status options for Completed projects.',
+    },
+    'PROJECT_SUB_STATUS_CANCELLED': {
+        'label':       'Project sub-statuses for Cancelled',
+        'value':       'Stopped|Cancelled',
+        'description': 'Pipe-separated sub-status options for Cancelled projects.',
+    },
+    'PROJECT_TYPES': {
+        'label':       'Project types',
+        'value':       'Project|Maintenance|Optimisation|BAU',
+        'description': (
+            'Pipe-separated list of project type options shown in the '
+            'project form. Edit to add or rename types.'
+        ),
+    },
+    'PROJECT_LIST_VIEWS': {
+        'label': 'Project list views (dropdown)',
+        'value': 'All|New|In Progress|Completed|Cancelled|BAU|Maintenance',
+        'description': 'Pipe-separated list of views shown in the Projects dropdown.',
+    },
+    'PROJECTS_LIST_VIEW_NEW': {
+        'label': 'Columns for New projects view',
+        'value': 'type|team|sub_status|priority|efforts|commit_date|next_connect|start|end|latest_comment',
+        'description': (
+            'Pipe-separated column names for the New projects list view. '
+            'Programme, Project and Code are always shown. '
+            'Supported: type, team, status, sub_status, priority, confidence, '
+            'efforts, commit_date, next_connect, start, end, latest_comment, label.'
+        ),
+    },
+    'PROJECTS_LIST_VIEW_IN_PROGRESS': {
+        'label': 'Columns for In Progress projects view',
+        'value': 'type|team|sub_status|priority|efforts|latest_comment',
+        'description': (
+            'Pipe-separated column names for the In Progress list view. '
+            'Supported: type, team, status, sub_status, priority, confidence, '
+            'efforts, commit_date, next_connect, start, end, latest_comment, label.'
+        ),
+    },
+    'PROJECTS_LIST_VIEW_COMPLETED': {
+        'label': 'Columns for Completed projects view',
+        'value': 'type|team|priority|efforts|latest_comment',
+        'description': (
+            'Pipe-separated column names for the Completed list view. '
+            'Supported: type, team, status, sub_status, priority, confidence, '
+            'efforts, commit_date, next_connect, start, end, latest_comment, label.'
+        ),
+    },
+    'PROJECTS_LIST_VIEW_CANCELLED': {
+        'label': 'Columns for Cancelled projects view',
+        'value': 'type|team|sub_status|priority|efforts|latest_comment',
+        'description': (
+            'Pipe-separated column names for the Cancelled list view. '
+            'Supported: type, team, status, sub_status, priority, confidence, '
+            'efforts, commit_date, next_connect, start, end, latest_comment, label.'
+        ),
+    },
+    'PROJECTS_LIST_VIEW_BAU': {
+        'label': 'Columns for BAU projects view',
+        'value': 'type|team|status|sub_status|priority|efforts|commit_date|start|end|latest_comment',
+        'description': (
+            'Pipe-separated column names for the BAU list view. '
+            'Supported: type, team, status, sub_status, priority, confidence, '
+            'efforts, commit_date, next_connect, start, end, latest_comment, label.'
+        ),
+    },
+    'PROJECTS_LIST_VIEW_MAINTENANCE': {
+        'label': 'Columns for Maintenance projects view',
+        'value': 'type|team|status|sub_status|priority|efforts|commit_date|start|end|latest_comment',
+        'description': (
+            'Pipe-separated column names for the Maintenance list view. '
+            'Supported: type, team, status, sub_status, priority, confidence, '
+            'efforts, commit_date, next_connect, start, end, latest_comment, label.'
+        ),
+    },
+    'PROJECTS_LIST_VIEW_MAINTENANCE_CRITERIA': {
+        'label': 'Project types included in Maintenance view',
+        'value': 'Maintenance',
+        'description': (
+            'Pipe-separated project types to include in the Maintenance view. '
+            'Default: Maintenance. Add others (e.g. Optimisation) to widen the filter.'
+        ),
+    },
+    'STORY_POINT_PRICE': {
+        'label': 'Standard day price (£)',
+        'value': '0.00',
+        'description': (
+            'Standard price per person-day in GBP (£). '
+            'Used to calculate project total cost: '
+            'estimate_days × day_price × (1 + contingency%).'
+        ),
+    }
     # ── Add future built-in configs below ─────────────────
     # 'SPRINT_LENGTH_DAYS': {
     #     'label':       'Default sprint length (days)',

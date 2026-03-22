@@ -1,1 +1,0 @@
-All good now. Let's proceed with second functionality, i.e., Team Members. I do not want to call it out as Engineers as it will be a mixture of Engineers & Architects. Let's create separate app, like apps/team_members along with api_urls, api_views, apps, forms, models, serializers, services, urls, views, templates (team_members_list, team_members_details, team_members_form)

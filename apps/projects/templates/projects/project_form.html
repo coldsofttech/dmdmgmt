@@ -1,0 +1,533 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+  {% if is_create %}New Project{% else %}Edit {{ project.display_name }}{% endif %} — Demand Management
+{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center gap-3">
+  <a href="{% url 'projects:list' %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <div>
+    <h1 class="rp-page-title">
+      {% if is_create %}New Project{% else %}Edit Project{% endif %}
+    </h1>
+    <p class="rp-page-subtitle">
+      {% if not is_create %}Updating <strong>{{ project.display_name }}</strong>{% endif %}
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<script>
+  const ALL_SUB_STATUSES = {{ all_sub_statuses|safe }};
+  const DAY_PRICE = {{ day_price }};
+</script>
+
+<form method="post" novalidate id="project-form">
+{% csrf_token %}
+<input type="hidden" id="collaborators-clear-flag" name="collaborators_clear" value="0">
+<div class="row g-4">
+
+  <!-- ── Left column ── -->
+  <div class="col-lg-8">
+
+    <!-- 1. Project identity -->
+    <div class="rp-card mb-4">
+      <h6 class="rp-card-heading">Project</h6>
+      <div class="row g-3">
+        <div class="col-sm-6">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.programme_name.id_for_label }}">Programme name</label>
+            <input type="text" id="{{ form.programme_name.id_for_label }}"
+                   name="{{ form.programme_name.html_name }}"
+                   value="{{ form.programme_name.value|default:'' }}"
+                   class="form-control rp-input {% if form.programme_name.errors %}is-invalid{% endif %}"
+                   placeholder="e.g. Digital Transformation"
+                   oninput="updateDisplayNameHint()" />
+            {% if form.programme_name.errors %}<div class="invalid-feedback">{{ form.programme_name.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-sm-6">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.project_name.id_for_label }}">
+              Project name <span class="rp-required">*</span>
+            </label>
+            <input type="text" id="{{ form.project_name.id_for_label }}"
+                   name="{{ form.project_name.html_name }}"
+                   value="{{ form.project_name.value|default:'' }}"
+                   class="form-control rp-input {% if form.project_name.errors %}is-invalid{% endif %}"
+                   placeholder="e.g. Customer Portal Rebuild"
+                   oninput="updateDisplayNameHint()" autofocus />
+            {% if form.project_name.errors %}<div class="invalid-feedback">{{ form.project_name.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-sm-5">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.display_name.id_for_label }}">
+              Display name <span class="rp-hint ms-1">Auto-generated</span>
+            </label>
+            <input type="text" id="{{ form.display_name.id_for_label }}"
+                   name="{{ form.display_name.html_name }}"
+                   value="{{ form.display_name.value|default:'' }}"
+                   class="form-control rp-input"
+                   placeholder="Auto: Programme: Project" />
+            <p class="rp-hint mt-1" id="display-name-preview"></p>
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.project_type.id_for_label }}">Type</label>
+            <select id="{{ form.project_type.id_for_label }}"
+                    name="{{ form.project_type.html_name }}"
+                    class="form-select rp-select">
+              {% for val, label in form.fields.project_type.choices %}
+              <option value="{{ val }}" {% if form.project_type.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Budgets (label) -->
+    <div class="rp-card mb-4">
+      <h6 class="rp-card-heading">Budgets</h6>
+      <div class="row g-3">
+        <div class="col-sm-6">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.label.id_for_label }}">
+              Label
+              <span class="rp-hint ms-1">Unique code, max 30 chars, ALL CAPS</span>
+            </label>
+            <input type="text" id="{{ form.label.id_for_label }}"
+                   name="{{ form.label.html_name }}"
+                   value="{{ form.label.value|default:'' }}"
+                   class="form-control rp-input rp-input--code {% if form.label.errors %}is-invalid{% endif %}"
+                   placeholder="PROGRAMMENAME_PROJECT"
+                   maxlength="30" autocomplete="off"
+                   oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')" />
+            {% if form.label.errors %}<div class="invalid-feedback">{{ form.label.errors.0 }}</div>{% endif %}
+            <p class="rp-hint mt-1">
+              Suggested: <code>PROGRAMMESHORTNAME_PROJECTSHORTNAME</code>.
+              Displayed in <em><code>italic code</code></em> style across the app.
+            </p>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.project_code.id_for_label }}">
+              Project code
+              <span class="rp-hint ms-1">Required for In Progress</span>
+            </label>
+            <input type="text"
+                   id="{{ form.project_code.id_for_label }}"
+                   name="{{ form.project_code.html_name }}"
+                   value="{{ form.project_code.value|default:'' }}"
+                   class="form-control rp-input rp-input--code {% if form.project_code.errors %}is-invalid{% endif %}"
+                   placeholder="PRJ-2025-001"
+                   oninput="onProjectCodeInput(this)"
+                   data-original="{{ form.project_code.value|default:'' }}" />
+            {% if form.project_code.errors %}<div class="invalid-feedback">{{ form.project_code.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        {% if not is_create %}
+        <div class="col-12" id="code-note-wrap"
+             style="{% if not form.project_code_note.value %}display:none{% endif %}">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.project_code_note.id_for_label }}">
+              <i class="bi bi-clock-history me-1 text-warning"></i>
+              Reason for code change
+              <span class="rp-hint ms-1">Recorded in audit history</span>
+            </label>
+            <textarea id="{{ form.project_code_note.id_for_label }}"
+                      name="{{ form.project_code_note.html_name }}"
+                      class="form-control rp-input"
+                      rows="2"
+                      placeholder="Explain why the project code is being changed…">{{ form.project_code_note.value|default:'' }}</textarea>
+            <p class="rp-hint mt-1">
+              This note will appear in the code change history on the project detail page.
+            </p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 3. Contacts -->
+    <div class="rp-card mb-4">
+      <h6 class="rp-card-heading">Contacts</h6>
+      <div class="row g-3">
+        <div class="col-sm-6">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.project_contacts.id_for_label }}">Project contacts</label>
+            <input type="text" id="{{ form.project_contacts.id_for_label }}"
+                   name="{{ form.project_contacts.html_name }}"
+                   value="{{ form.project_contacts.value|default:'' }}"
+                   class="form-control rp-input" placeholder="e.g. Jane Smith, John Doe" />
+            <p class="rp-hint mt-1">Comma-separated names.</p>
+          </div>
+        </div>
+        <div class="col-sm-6">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.finance_contacts.id_for_label }}">Finance contacts</label>
+            <input type="text" id="{{ form.finance_contacts.id_for_label }}"
+                   name="{{ form.finance_contacts.html_name }}"
+                   value="{{ form.finance_contacts.value|default:'' }}"
+                   class="form-control rp-input" placeholder="e.g. Alice Brown" />
+            <p class="rp-hint mt-1">Comma-separated names.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Teams -->
+    <div class="rp-card mb-4">
+      <h6 class="rp-card-heading">Teams</h6>
+      <div class="row g-3">
+        <div class="col-sm-5">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.assigned_team.id_for_label }}">
+              Assigned team <span class="rp-hint ms-1">Required for In Progress</span>
+            </label>
+            <select id="{{ form.assigned_team.id_for_label }}"
+                    name="{{ form.assigned_team.html_name }}"
+                    class="form-select rp-select {% if form.assigned_team.errors %}is-invalid{% endif %}"
+                    onchange="updateCollaboratorOptions()">
+              <option value="">— No team assigned —</option>
+              {% for team in form.fields.assigned_team.queryset %}
+              <option value="{{ team.pk }}"
+                {% if form.assigned_team.value|stringformat:"s" == team.pk|stringformat:"s" %}selected{% endif %}>
+                {{ team.name }}
+              </option>
+              {% endfor %}
+            </select>
+            {% if form.assigned_team.errors %}<div class="invalid-feedback">{{ form.assigned_team.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-sm-7">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.collaborators.id_for_label }}">
+              Collaborating teams
+            </label>
+            {# Fix issue 9: hidden input forces empty list when nothing is selected #}
+            <!-- <input type="hidden" name="{{ form.collaborators.html_name }}" value=""> -->
+            <select id="{{ form.collaborators.id_for_label }}"
+                    name="{{ form.collaborators.html_name }}"
+                    class="form-select rp-select {% if form.collaborators.errors %}is-invalid{% endif %}"
+                    multiple size="5"
+                    id="collaborators-select">
+              {% for team in form.fields.collaborators.queryset %}
+              <option value="{{ team.pk }}"
+                {% for sel in form.collaborators.value %}
+                  {% if sel|stringformat:"s" == team.pk|stringformat:"s" %}selected{% endif %}
+                {% endfor %}>
+                {{ team.name }}
+              </option>
+              {% endfor %}
+            </select>
+            {% if form.collaborators.errors %}
+            <div class="invalid-feedback d-block">{{ form.collaborators.errors.0 }}</div>
+            {% endif %}
+            <p class="rp-hint mt-1">
+              Hold Ctrl / ⌘ to select multiple.
+              Click a selected item again to deselect.
+              Cannot include the assigned team.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Status -->
+    <div class="rp-card mb-4">
+      <h6 class="rp-card-heading">Status</h6>
+      <div class="row g-3">
+        <div class="col-sm-4">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.status.id_for_label }}">Status</label>
+            <select id="{{ form.status.id_for_label }}"
+                    name="{{ form.status.html_name }}"
+                    class="form-select rp-select {% if form.status.errors %}is-invalid{% endif %}"
+                    onchange="updateSubStatus(this.value)">
+              {% for val, label in form.fields.status.choices %}
+              <option value="{{ val }}" {% if form.status.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            {% if form.status.errors %}<div class="invalid-feedback d-block">{{ form.status.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-sm-8">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.sub_status.id_for_label }}">
+              Sub-status <span class="rp-hint ms-1">Configured in Settings → Configurations</span>
+            </label>
+            <select id="{{ form.sub_status.id_for_label }}"
+                    name="{{ form.sub_status.html_name }}"
+                    class="form-select rp-select">
+              {% for val, label in form.fields.sub_status.choices %}
+              <option value="{{ val }}" {% if form.sub_status.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="alert rp-info-banner py-2" style="font-size:12.5px">
+            <i class="bi bi-info-circle me-2"></i>
+            Moving to <strong>In Progress</strong> requires: Assigned Team, Project Code, Confidence, Priority.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Planning -->
+    <div class="rp-card mb-4">
+      <h6 class="rp-card-heading">Planning</h6>
+      <div class="row g-3">
+        <div class="col-sm-4">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.confidence.id_for_label }}">
+              Confidence <span class="rp-hint ms-1">Required for In Progress</span>
+            </label>
+            <select id="{{ form.confidence.id_for_label }}"
+                    name="{{ form.confidence.html_name }}"
+                    class="form-select rp-select">
+              {% for val, label in form.fields.confidence.choices %}
+              <option value="{{ val }}" {% if form.confidence.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.priority.id_for_label }}">
+              Priority <span class="rp-hint ms-1">Required for In Progress</span>
+            </label>
+            <select id="{{ form.priority.id_for_label }}"
+                    name="{{ form.priority.html_name }}"
+                    class="form-select rp-select">
+              {% for val, label in form.fields.priority.choices %}
+              <option value="{{ val }}" {% if form.priority.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.next_connect_date.id_for_label }}">Next connect date</label>
+            <input type="date" id="{{ form.next_connect_date.id_for_label }}"
+                   name="{{ form.next_connect_date.html_name }}"
+                   value="{{ form.next_connect_date.value|date:'Y-m-d'|default:'' }}"
+                   class="form-control rp-input" />
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.tentative_start_date.id_for_label }}">Tentative start</label>
+            <input type="date" id="{{ form.tentative_start_date.id_for_label }}"
+                   name="{{ form.tentative_start_date.html_name }}"
+                   value="{{ form.tentative_start_date.value|date:'Y-m-d'|default:'' }}"
+                   class="form-control rp-input {% if form.tentative_start_date.errors %}is-invalid{% endif %}" />
+            {% if form.tentative_start_date.errors %}<div class="invalid-feedback">{{ form.tentative_start_date.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.tentative_end_date.id_for_label }}">Tentative end</label>
+            <input type="date" id="{{ form.tentative_end_date.id_for_label }}"
+                   name="{{ form.tentative_end_date.html_name }}"
+                   value="{{ form.tentative_end_date.value|date:'Y-m-d'|default:'' }}"
+                   class="form-control rp-input {% if form.tentative_end_date.errors %}is-invalid{% endif %}" />
+            {% if form.tentative_end_date.errors %}<div class="invalid-feedback">{{ form.tentative_end_date.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. Estimates (shown when efforts_issued) -->
+    <div class="rp-card mb-4" id="estimates-section">
+      <h6 class="rp-card-heading">
+        Estimates
+        <span class="rp-hint ms-2" style="font-size:11.5px">
+          Captures detail once efforts are issued. Standard day price: <strong>£{{ day_price }}</strong>
+          (set via <code>STORY_POINT_PRICE</code> in Settings → Configurations)
+        </span>
+      </h6>
+      <div class="row g-3">
+        <div class="col-sm-4">
+          <div class="form-check form-switch rp-switch">
+              <input class="form-check-input" type="checkbox"
+                    id="{{ form.efforts_issued.id_for_label }}"
+                    name="{{ form.efforts_issued.html_name }}"
+                    {% if form.efforts_issued.value %}checked{% endif %} />
+              <label class="form-check-label rp-label" for="{{ form.efforts_issued.id_for_label }}">
+                Efforts issued
+              </label>
+            </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.efforts_issue_commitment_date.id_for_label }}">
+              Commitment date
+            </label>
+            <input type="date" id="{{ form.efforts_issue_commitment_date.id_for_label }}"
+                   name="{{ form.efforts_issue_commitment_date.html_name }}"
+                   value="{{ form.efforts_issue_commitment_date.value|date:'Y-m-d'|default:'' }}"
+                   class="form-control rp-input" />
+          </div>
+        </div>
+        <div class="col-12">  
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.estimate_link.id_for_label }}">
+              Link to estimates
+            </label>
+            <input type="url" id="{{ form.estimate_link.id_for_label }}"
+                   name="{{ form.estimate_link.html_name }}"
+                   value="{{ form.estimate_link.value|default:'' }}"
+                   class="form-control rp-input {% if form.estimate_link.errors %}is-invalid{% endif %}"
+                   placeholder="https://example.sharepoint.com/estimates/…" />
+            {% if form.estimate_link.errors %}<div class="invalid-feedback">{{ form.estimate_link.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.estimate_days.id_for_label }}">
+              Estimate (days)
+            </label>
+            <input type="number" id="{{ form.estimate_days.id_for_label }}"
+                   name="{{ form.estimate_days.html_name }}"
+                   value="{{ form.estimate_days.value|default:'' }}"
+                   class="form-control rp-input {% if form.estimate_days.errors %}is-invalid{% endif %}"
+                   placeholder="e.g. 45" min="0" step="0.5"
+                   oninput="recalcCost()" />
+            {% if form.estimate_days.errors %}<div class="invalid-feedback">{{ form.estimate_days.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="rp-field">
+            <label class="rp-label" for="{{ form.contingency_pct.id_for_label }}">
+              Contingency (%)
+            </label>
+            <input type="number" id="{{ form.contingency_pct.id_for_label }}"
+                   name="{{ form.contingency_pct.html_name }}"
+                   value="{{ form.contingency_pct.value|default:'' }}"
+                   class="form-control rp-input {% if form.contingency_pct.errors %}is-invalid{% endif %}"
+                   placeholder="e.g. 10" min="0" max="100" step="0.5"
+                   oninput="recalcCost()" />
+            {% if form.contingency_pct.errors %}<div class="invalid-feedback">{{ form.contingency_pct.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-sm-4 d-flex align-items-end">
+          <div class="rp-field w-100">
+            <label class="rp-label">Total cost (auto-calculated)</label>
+            <div class="rp-value-pill rp-value-pill--lg" id="cost-display"
+                 style="font-size:16px;background:#f0fdf4;border-color:#bbf7d0;color:#15803d">
+              £0.00
+            </div>
+            <p class="rp-hint mt-1">
+              Formula: estimate days × £{{ day_price }} × (1 + contingency%)
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. Others -->
+    <div class="rp-card mb-4">
+      <h6 class="rp-card-heading">Others</h6>
+      <div class="row g-3">
+        <div class="col-sm-4 d-flex align-items-center">
+          <div class="form-check form-switch rp-switch">
+            <input class="form-check-input" type="checkbox"
+                   id="{{ form.run_cost_applies.id_for_label }}"
+                   name="{{ form.run_cost_applies.html_name }}"
+                   {% if form.run_cost_applies.value %}checked{% endif %} />
+            <label class="form-check-label rp-label" for="{{ form.run_cost_applies.id_for_label }}">
+              Run cost applies
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if form.non_field_errors %}
+    <div class="alert alert-danger">
+      {% for err in form.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-lg me-1"></i>
+        {% if is_create %}Create project{% else %}Save changes{% endif %}
+      </button>
+      <a href="{% url 'projects:list' %}" class="btn btn-outline-secondary">Cancel</a>
+      {% if not is_create %}
+      <button type="button" class="btn btn-outline-danger ms-auto"
+              onclick="confirmDelete({{ project.pk }},'{{ project.display_name|escapejs }}','/api/v1/projects/{{ project.pk }}/','/projects/')">
+        <i class="bi bi-trash me-1"></i>Delete
+      </button>
+      {% endif %}
+    </div>
+  </div><!-- /left col -->
+
+  <!-- ── Right: tips + metadata ── -->
+  <div class="col-lg-4">
+    <div class="rp-card rp-card--muted">
+      <h6 class="fw-600 mb-3"><i class="bi bi-info-circle me-2"></i>Tips</h6>
+      <ul class="rp-tip-list">
+        <li><strong>Label</strong> is a unique ALL-CAPS budget code displayed in italic. Use format <code>PROGRAMME_PROJECT</code>.</li>
+        <li><strong>Total cost</strong> is auto-calculated: estimate days × day price (from config) × (1 + contingency%).</li>
+        <li><strong>Commitment date</strong> is always available regardless of efforts issued toggle.</li>
+        <li>To clear all <strong>collaborators</strong>, deselect all options (Ctrl+A then Deselect).</li>
+        <li><strong>Sub-status</strong> options change with status and are configured in Settings → Configurations.</li>
+      </ul>
+    </div>
+    {% if not is_create %}
+    <div class="rp-card rp-card--muted mt-3">
+      <h6 class="fw-600 mb-2"><i class="bi bi-clock-history me-2"></i>Metadata</h6>
+      <dl class="rp-meta-list">
+        <dt>Created</dt><dd>{{ project.created_at|date:"d M Y, H:i" }}</dd>
+        <dt>Last updated</dt><dd>{{ project.updated_at|date:"d M Y, H:i" }}</dd>
+      </dl>
+    </div>
+    {% endif %}
+  </div>
+
+</div><!-- /row -->
+</form>
+
+<!-- Delete modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete project?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-team-name"></strong> and all its comments will be permanently removed.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/projects.js' %}"></script>
+<script>
+// Initialise cost display from existing values on page load
+recalcCost();
+</script>
+{% endblock %}

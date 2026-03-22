@@ -181,5 +181,12 @@ class TeamDetailView(DetailView):
             ctx['team_members']        = []
             ctx['member_count']        = 0
             ctx['active_member_count'] = 0
+
+        # ── Active projects (assigned + collaborating) ────
+        try:
+            from apps.projects.services import ProjectService
+            ctx['active_projects'] = ProjectService.get_team_active_projects(team.pk)
+        except Exception:
+            ctx['active_projects'] = []
  
         return ctx

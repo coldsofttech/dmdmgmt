@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+{% load static %}
+{% load projects_extras %}
+
+{% block title %}{{ view_label }} — Projects — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-start justify-content-between flex-wrap gap-3">
+  <div>
+    <h1 class="rp-page-title d-flex align-items-center gap-2 flex-wrap">
+      Projects
+      {% if view_label != 'All Projects' %}
+      <span class="rp-badge-status rp-badge-status--{{ view_label|lower|cut:' ' }}"
+            style="font-size:13px">
+        {{ view_label }}
+      </span>
+      {% endif %}
+    </h1>
+    <p class="rp-page-subtitle">All demands and projects across the business unit</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <!-- Views dropdown -->
+    <div class="dropdown">
+      <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+        <i class="bi bi-layout-text-sidebar me-1"></i>{{ view_label }}
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li>
+          <a class="dropdown-item {% if view_label == 'All Projects' %}active{% endif %}"
+             href="{% url 'projects:list' %}">
+            <i class="bi bi-grid me-2"></i>All Projects
+          </a>
+        </li>
+        <li><hr class="dropdown-divider"></li>
+        {% for vn in list_views %}
+        {% if vn == 'New' %}
+        <li><a class="dropdown-item {% if view_label == 'New' %}active{% endif %}"
+               href="{% url 'projects:list_new' %}">
+          <i class="bi bi-circle me-2"></i>New</a></li>
+        {% elif vn == 'In Progress' %}
+        <li><a class="dropdown-item {% if view_label == 'In Progress' %}active{% endif %}"
+               href="{% url 'projects:list_in_progress' %}">
+          <i class="bi bi-arrow-right-circle me-2"></i>In Progress</a></li>
+        {% elif vn == 'Completed' %}
+        <li><a class="dropdown-item {% if view_label == 'Completed' %}active{% endif %}"
+               href="{% url 'projects:list_completed' %}">
+          <i class="bi bi-check-circle me-2"></i>Completed</a></li>
+        {% elif vn == 'Cancelled' %}
+        <li><a class="dropdown-item {% if view_label == 'Cancelled' %}active{% endif %}"
+               href="{% url 'projects:list_cancelled' %}">
+          <i class="bi bi-x-circle me-2"></i>Cancelled</a></li>
+        {% elif vn == 'BAU' %}
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item {% if view_label == 'BAU' %}active{% endif %}"
+               href="{% url 'projects:list_bau' %}">
+          <i class="bi bi-repeat me-2"></i>BAU</a></li>
+        {% elif vn == 'Maintenance' %}
+        <li><a class="dropdown-item {% if view_label == 'Maintenance' %}active{% endif %}"
+               href="{% url 'projects:list_maintenance' %}">
+          <i class="bi bi-tools me-2"></i>Maintenance</a></li>
+        {% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+    <a href="{% url 'projects:create' %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>New Project
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-sm-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Total</span>
+      <span class="rp-stat-value">{{ total_count }}</span>
+    </div>
+  </div>
+  <div class="col-6 col-sm-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">New</span>
+      <span class="rp-stat-value">{{ new_count }}</span>
+    </div>
+  </div>
+  <div class="col-6 col-sm-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">In Progress</span>
+      <span class="rp-stat-value">{{ in_progress_count }}</span>
+    </div>
+  </div>
+  <div class="col-6 col-sm-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Completed</span>
+      <span class="rp-stat-value">{{ completed_count }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="rp-toolbar d-flex gap-2 mb-3 flex-wrap">
+  <div class="rp-search" style="flex:1;min-width:180px">
+    <i class="bi bi-search rp-search-icon"></i>
+    <input type="text" id="project-search" class="form-control rp-search-input"
+           placeholder="Search name, programme, code, label…" />
+  </div>
+  <select id="status-filter" class="form-select rp-select" style="max-width:140px"
+          onchange="filterProjectTable()">
+    <option value="">All statuses</option>
+    {% for val, label in status_choices %}
+    <option value="{{ val|lower }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select id="substatus-filter" class="form-select rp-select" style="max-width:200px"
+          onchange="filterProjectTable()">
+    <option value="">All sub-statuses</option>
+    {% for ss in all_sub_statuses %}
+    <option value="{{ ss|lower }}">{{ ss }}</option>
+    {% endfor %}
+  </select>
+  <select id="type-filter" class="form-select rp-select" style="max-width:140px"
+          onchange="filterProjectTable()">
+    <option value="">All types</option>
+    {% for pt in project_types %}
+    <option value="{{ pt|lower }}">{{ pt }}</option>
+    {% endfor %}
+  </select>
+  <select id="team-filter" class="form-select rp-select" style="max-width:150px"
+          onchange="filterProjectTable()">
+    <option value="">All teams</option>
+    {% for team in teams %}
+    <option value="{{ team.name|lower }}">{{ team.name }}</option>
+    {% endfor %}
+  </select>
+  <select id="priority-filter" class="form-select rp-select" style="max-width:130px"
+          onchange="filterProjectTable()">
+    <option value="">All priorities</option>
+    {% for val, label in priority_choices %}
+    <option value="{{ val|lower }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select id="confidence-filter" class="form-select rp-select" style="max-width:140px"
+          onchange="filterProjectTable()">
+    <option value="">All confidence</option>
+    {% for val, label in confidence_choices %}
+    <option value="{{ val|lower }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+<!-- Table (horizontal scroll) -->
+<div class="rp-table-wrap" style="overflow-x:auto">
+  <table class="table rp-table" id="projects-table" style="min-width:900px">
+    <thead>
+      <tr>
+        {# Fixed columns always shown #}
+        <th class="sortable" onclick="sortProjectTable(0)">
+          Programme <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        </th>
+        <th class="sortable" onclick="sortProjectTable(1)">
+          Project <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        </th>
+        <!-- <th class="sortable" onclick="sortProjectTable(0)">
+          Programme <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        </th>
+        <th class="sortable" onclick="sortProjectTable(1)">
+          Project <i class="bi bi-chevron-expand rp-sort-icon"></i>
+        </th>
+        <th>Code</th> -->
+
+        {# Configurable columns #}
+        {% if 'label' in view_columns %}<th>Label</th>{% endif %}
+        {% if 'type' in view_columns %}<th>Type</th>{% endif %}
+        {% if 'team' in view_columns %}<th>Team</th>{% endif %}
+        {% if 'status' in view_columns %}<th class="text-center">Status</th>{% endif %}
+        {% if 'sub_status' in view_columns %}<th class="text-center">Sub-status</th>{% endif %}
+        {% if 'priority' in view_columns %}<th class="text-center">Priority</th>{% endif %}
+        {% if 'confidence' in view_columns %}<th class="text-center">Confidence</th>{% endif %}
+        {% if 'efforts' in view_columns %}<th class="text-center">Efforts</th>{% endif %}
+        {% if 'commit_date' in view_columns %}<th class="text-center">Commit date</th>{% endif %}
+        {% if 'next_connect' in view_columns %}<th class="text-center">Next connect</th>{% endif %}
+        {% if 'start' in view_columns %}<th class="text-center">Start</th>{% endif %}
+        {% if 'end' in view_columns %}<th class="text-center">End</th>{% endif %}
+        {% if 'latest_comment' in view_columns %}<th style="min-width:160px">Latest comment</th>{% endif %}
+        <th class="text-center">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for project in projects %}
+      <tr data-project-id="{{ project.id }}"
+          data-programme="{{ project.programme_name|lower }}"
+          data-name="{{ project.display_name|lower }}"
+          data-code="{{ project.project_code|lower }}"
+          data-label="{{ project.label|lower|default:'' }}"
+          data-status="{{ project.status|lower }}"
+          data-substatus="{{ project.sub_status|lower }}"
+          data-type="{{ project.project_type|lower }}"
+          data-team="{{ project.assigned_team.name|lower|default:'' }}"
+          data-priority="{{ project.priority|lower }}"
+          data-confidence="{{ project.confidence|lower }}">
+
+        <td class="text-secondary" style="font-size:13px">
+          {{ project.programme_name|default:"—" }}
+        </td>
+
+        <td>
+          <a href="{% url 'projects:detail' project.pk %}" class="rp-link fw-500">
+            {{ project.project_name }}
+          </a>
+          {% if project.project_code %}
+          <div><span class="rp-code" style="font-size:11px">{{ project.project_code }}</span></div>
+          {% endif %}
+        </td>
+
+        <!-- {# Programme #}
+        <td class="text-secondary" style="font-size:13px">
+          {{ project.programme_name|default:"—" }}
+        </td> -->
+
+        <!-- {# Project name #}
+        <td>
+          <a href="{% url 'projects:detail' project.pk %}" class="rp-link fw-500">
+            {{ project.project_name }}
+          </a>
+        </td>
+
+        {# Code #}
+        <td>
+          {% if project.project_code %}
+          <span class="rp-code" style="font-size:11px">{{ project.project_code }}</span>
+          {% else %}—{% endif %}
+        </td> -->
+
+        {# Configurable columns #}
+        {% if 'label' in view_columns %}
+        <td>
+          {% if project.label %}
+          <em><span class="rp-code" style="font-size:11px;font-style:italic">{{ project.label }}</span></em>
+          {% else %}{% endif %}
+        </td>
+        {% endif %}
+
+        {% if 'type' in view_columns %}
+        <td>
+          <span class="rp-badge rp-badge--muted" style="font-size:11.5px">
+            {{ project.project_type }}
+          </span>
+        </td>
+        {% endif %}
+
+        {% if 'team' in view_columns %}
+        <td>
+          {% if project.assigned_team %}
+          <span class="rp-tag">{{ project.assigned_team.name }}</span>
+          {% else %}<span class="text-secondary" style="font-size:12px"></span>{% endif %}
+        </td>
+        {% endif %}
+
+        {% if 'status' in view_columns %}
+        <td class="text-center">
+          <span class="rp-badge-status rp-badge-status--{{ project.status|lower }}">
+            {{ project.get_status_display }}
+          </span>
+        </td>
+        {% endif %}
+
+        {% if 'sub_status' in view_columns %}
+        <td class="text-center" style="font-size:12px;color:var(--color-text-2)">
+          {{ project.sub_status }}
+        </td>
+        {% endif %}
+
+        {% if 'priority' in view_columns %}
+        <td class="text-center">
+          <span class="rp-badge-level rp-badge-level--{{ project.priority|lower }}">
+            {{ project.get_priority_display }}
+          </span>
+        </td>
+        {% endif %}
+
+        {% if 'confidence' in view_columns %}
+        <td class="text-center">
+          <span class="rp-badge-level rp-badge-level--{{ project.confidence|lower }}">
+            {{ project.get_confidence_display }}
+          </span>
+        </td>
+        {% endif %}
+
+        {% if 'efforts' in view_columns %}
+        <td class="text-center">
+          {% if project.efforts_issued %}
+          <span class="rp-badge rp-badge--success">Issued</span>
+          {% else %}
+          <span class="rp-badge rp-badge--muted">Pending</span>
+          {% endif %}
+        </td>
+        {% endif %}
+
+        {% if 'commit_date' in view_columns %}
+        <td class="text-center" style="font-size:12.5px;white-space:nowrap">
+          {{ project.efforts_issue_commitment_date|date:"d M Y" }}
+        </td>
+        {% endif %}
+
+        {% if 'next_connect' in view_columns %}
+        <td class="text-center" style="font-size:12.5px;white-space:nowrap">
+          {{ project.next_connect_date|date:"d M Y" }}
+        </td>
+        {% endif %}
+
+        {% if 'start' in view_columns %}
+        <td class="text-center" style="font-size:12.5px;white-space:nowrap">
+          {{ project.tentative_start_date|date:"d M Y" }}
+        </td>
+        {% endif %}
+
+        {% if 'end' in view_columns %}
+        <td class="text-center" style="font-size:12.5px;white-space:nowrap">
+          {{ project.tentative_end_date|date:"d M Y" }}
+        </td>
+        {% endif %}
+
+        {# Fix issue 10: use the cached attribute set in get_context_data #}
+        {% if 'latest_comment' in view_columns %}
+        <td style="min-width:160px">
+          {% with lc=latest_comments|get_item:project.pk %}
+          {% if lc %}
+          <span class="rp-truncate text-secondary d-block"
+                style="font-size:12px;max-width:200px"
+                title="{{ lc.body }}">
+            {{ lc.body|truncatechars:55 }}
+          </span>
+          <span style="font-size:11px;color:var(--color-text-3)">
+            {{ lc.created_at|date:"d M Y" }}{% if lc.author %} · {{ lc.author }}{% endif %}
+          </span>
+          {% else %}
+          <span class="text-secondary" style="font-size:12px">—</span>
+          {% endif %}
+          {% endwith %}
+        </td>
+        {% endif %}
+
+        <td class="text-center">
+          <div class="d-flex justify-content-center gap-1">
+            <a href="{% url 'projects:detail' project.pk %}"
+               class="btn btn-ghost-icon" title="View">
+              <i class="bi bi-eye"></i>
+            </a>
+            <a href="{% url 'projects:edit' project.pk %}"
+               class="btn btn-ghost-icon" title="Edit">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <button class="btn btn-ghost-icon btn-ghost-icon--danger" title="Delete"
+                    onclick="confirmDelete(
+                      {{ project.id }},
+                      '{{ project.display_name|escapejs }}',
+                      '/api/v1/projects/{{ project.id }}/',
+                      '/projects/'
+                    )">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="20" class="text-center py-5 text-secondary">
+          <i class="bi bi-kanban display-6 d-block mb-2 opacity-25"></i>
+          No projects found. <a href="{% url 'projects:create' %}">Create one</a>.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Delete modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete project?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-team-name"></strong> and all its comments will be permanently removed.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/projects.js' %}"></script>
+{% endblock %}

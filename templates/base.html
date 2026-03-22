@@ -50,7 +50,7 @@
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="#">
+          <a class="nav-link {% if request.resolver_match.app_name == 'projects' %}active{% endif %}" href="{% url 'projects:list' %}">
             <i class="bi bi-kanban-fill me-1"></i>Projects
           </a>
         </li>
@@ -87,7 +87,7 @@
       <a href="{% url 'team_members:list' %}" class="rp-sidebar-link {% if request.resolver_match.app_name == 'team_members' %}active{% endif %}">
         <i class="bi bi-person-badge"></i> Members
       </a>
-      <a href="#" class="rp-sidebar-link">
+      <a href="{% url 'projects:list' %}" class="rp-sidebar-link {% if request.resolver_match.app_name == 'projects' %}active{% endif %}">
         <i class="bi bi-kanban"></i> Projects
       </a>
       <a href="#" class="rp-sidebar-link">

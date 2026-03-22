@@ -32,9 +32,10 @@
 {% block content %}
 <div class="row g-4">
 
-  <!-- Details card -->
-  <div class="col-lg-5">
-    <div class="rp-card">
+  <!-- Left: Skill details + summary -->
+  <div class="col-lg-4">
+
+    <div class="rp-card mb-3">
       <h6 class="rp-card-heading">Skill details</h6>
       <dl class="rp-meta-list">
         <dt>Code</dt>
@@ -55,17 +56,162 @@
         <dd>{{ skill.updated_at|date:"d M Y, H:i" }}</dd>
       </dl>
     </div>
+
+    <div class="rp-card rp-card--muted">
+      <h6 class="rp-card-heading">Members summary</h6>
+      <dl class="rp-meta-list">
+        <dt>Total with skill</dt>
+        <dd class="fw-500">{{ member_count }}</dd>
+        <dt>Active</dt>
+        <dd class="fw-500">{{ active_member_count }}</dd>
+        <dt>Inactive</dt>
+        <dd class="fw-500">{{ inactive_member_count }}</dd>
+      </dl>
+    </div>
+
   </div>
 
-  <!-- Usage panel (placeholder for when Engineers module exists) -->
-  <div class="col-lg-7">
+  <!-- Right: Team members table -->
+  <div class="col-lg-8">
     <div class="rp-card">
-      <h6 class="rp-card-heading">Engineers with this skill</h6>
-      <p class="text-secondary">
-        Engineer assignments will appear here once the Engineers module is implemented.
-      </p>
+
+      <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <h6 class="rp-card-heading mb-0">
+          Team members with this skill
+          {% if member_count %}
+          <span class="rp-badge rp-badge--muted ms-2">{{ member_count }}</span>
+          {% endif %}
+        </h6>
+        {% if skill_members %}
+        <div class="rp-search" style="width:220px">
+          <i class="bi bi-search rp-search-icon"></i>
+          <input type="text" id="skill-member-search"
+                 class="form-control rp-search-input"
+                 placeholder="Search members…" />
+        </div>
+        {% endif %}
+      </div>
+
+      {% if skill_members %}
+      <div class="rp-table-wrap" style="box-shadow:none;border:none">
+        <table class="table rp-table mb-0" id="skill-members-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Team</th>
+              <th class="text-center">Location</th>
+              <th class="text-center">Type</th>
+              <th class="text-center">Status</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for member in skill_members %}
+            <tr data-member-name="{{ member.display_name|lower }}">
+              <td>
+                <a href="{% url 'team_members:detail' member.pk %}" class="rp-link fw-500">
+                  {{ member.display_name }}
+                </a>
+              </td>
+              <td>
+                <span class="rp-badge-role rp-badge-role--{{ member.role|lower }}">
+                  {{ member.get_role_display }}
+                </span>
+              </td>
+              <td>
+                {% if member.team %}
+                <a href="{% url 'teams:detail' member.team.pk %}" class="rp-link">
+                  <span class="rp-tag">{{ member.team.name }}</span>
+                </a>
+                {% else %}
+                <span class="rp-badge rp-badge--muted">Unassigned</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if member.location == 'ONSITE' %}
+                <span class="rp-badge rp-badge--success">Onsite</span>
+                {% else %}
+                <span class="rp-badge rp-badge--info">Offshore</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <span class="rp-badge {% if member.employee_type == 'CONTRACTOR' %}rp-badge--warning{% else %}rp-badge--muted{% endif %}">
+                  {{ member.get_employee_type_display }}
+                </span>
+              </td>
+              <td class="text-center">
+                {% if member.is_active %}
+                <span class="rp-badge rp-badge--success">Active</span>
+                {% else %}
+                <span class="rp-badge rp-badge--muted">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{% url 'team_members:detail' member.pk %}"
+                     class="btn btn-ghost-icon" title="View member">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <a href="{% url 'team_members:edit' member.pk %}"
+                     class="btn btn-ghost-icon" title="Edit member">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% else %}
+      <div class="text-center py-5 text-secondary">
+        <i class="bi bi-person-x display-6 d-block mb-2 opacity-25"></i>
+        <p class="mb-1">No team members have this skill assigned yet.</p>
+        <a href="{% url 'team_members:create' %}" class="btn btn-sm btn-outline-primary mt-2">
+          <i class="bi bi-plus me-1"></i>Add a member
+        </a>
+      </div>
+      {% endif %}
+
     </div>
   </div>
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const searchInput = document.getElementById('skill-member-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      const query = this.value.toLowerCase().trim();
+      const rows  = document.querySelectorAll('#skill-members-table tbody tr[data-member-name]');
+      let visible = 0;
+
+      rows.forEach(row => {
+        const show = !query || (row.dataset.memberName || '').includes(query);
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+
+      let emptyRow = document.getElementById('sm-empty-row');
+      if (!visible) {
+        if (!emptyRow) {
+          emptyRow = document.createElement('tr');
+          emptyRow.id = 'sm-empty-row';
+          emptyRow.innerHTML = `
+            <td colspan="7" class="text-center py-3 text-secondary">
+              <i class="bi bi-search me-1"></i>No members match your search.
+            </td>`;
+          document.querySelector('#skill-members-table tbody').appendChild(emptyRow);
+        }
+        emptyRow.style.display = '';
+      } else if (emptyRow) {
+        emptyRow.style.display = 'none';
+      }
+    });
+  }
+</script>
 {% endblock %}

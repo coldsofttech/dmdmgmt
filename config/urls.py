@@ -21,12 +21,14 @@ from apps.teams.api_views import TeamViewSet
 from apps.skills.api_views import SkillViewSet
 from apps.configurations.api_views import ConfigurationViewSet
 from apps.team_members.api_views import TeamMemberViewSet
+from apps.projects.api_views import ProjectViewSet
 
 router = DefaultRouter()
 router.register(r'teams', TeamViewSet, basename='team')
 router.register(r'skills', SkillViewSet, basename='skill')
 router.register(r'configs', ConfigurationViewSet, basename='configuration')
-router.register(r'members', TeamMemberViewSet,    basename='team-member')
+router.register(r'members', TeamMemberViewSet, basename='team-member')
+router.register(r'projects', ProjectViewSet, basename='project')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -37,6 +39,7 @@ urlpatterns = [
     # Manage
     path('teams/', include('apps.teams.urls')),
     path('members/', include('apps.team_members.urls')),
+    path('projects/', include('apps.projects.urls')),
 
     # Config / Settings
     path('settings/skills/', include('apps.skills.urls')),

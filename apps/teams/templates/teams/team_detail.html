@@ -66,7 +66,7 @@
   </div>
 
   <!-- Members table — full width -->
-  <div class="col-12">
+  <div class="col-12 mb-3">
     <div class="rp-card">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h6 class="rp-card-heading mb-0">
@@ -164,6 +164,128 @@
     </div>
   </div>
 
+</div>
+
+<!-- ── Active Projects section ── -->
+  <div class="col-12">
+    <div class="rp-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="rp-card-heading mb-0">
+          Active projects
+          <span class="rp-hint ms-2">New &amp; In Progress — as assigned team or collaborator</span>
+          {% if active_projects %}
+          <span class="rp-badge rp-badge--muted ms-2">{{ active_projects|length }}</span>
+          {% endif %}
+        </h6>
+        <a href="{% url 'projects:create' %}" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-plus me-1"></i>New project
+        </a>
+      </div>
+ 
+      {% if active_projects %}
+      <div class="rp-table-wrap" style="box-shadow:none;border:none">
+        <table class="table rp-table mb-0">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Programme</th>
+              <th class="text-center">Type</th>
+              <th class="text-center">Status</th>
+              <th class="text-center">Role</th>
+              <th class="text-center">Priority</th>
+              <th class="text-center">Confidence</th>
+              <th class="text-center">Start</th>
+              <th class="text-center">End</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for project in active_projects %}
+            <tr>
+              <td>
+                <a href="{% url 'projects:detail' project.pk %}" class="rp-link fw-500">
+                  {{ project.project_name }}
+                </a>
+                {% if project.project_code %}
+                <div><span class="rp-code" style="font-size:11px">{{ project.project_code }}</span></div>
+                {% endif %}
+              </td>
+ 
+              <td class="text-secondary" style="font-size:13px">
+                {{ project.programme_name|default:"—" }}
+              </td>
+ 
+              <td class="text-center">
+                <span class="rp-badge rp-badge--muted" style="font-size:11.5px">
+                  {{ project.project_type|default:"—" }}
+                </span>
+              </td>
+ 
+              <td class="text-center">
+                <span class="rp-badge-status rp-badge-status--{{ project.status|lower }}">
+                  {{ project.get_status_display }}
+                </span>
+              </td>
+ 
+              {#
+                Show whether this team is the ASSIGNED team or a COLLABORATOR.
+                assigned_team_id is checked directly — no extra query.
+              #}
+              <td class="text-center">
+                {% if project.assigned_team_id == team.pk %}
+                <span class="rp-badge rp-badge--success" style="font-size:11px">Assigned</span>
+                {% else %}
+                <span class="rp-badge rp-badge--info" style="font-size:11px">Collaborator</span>
+                {% endif %}
+              </td>
+ 
+              <td class="text-center">
+                <span class="rp-badge-level rp-badge-level--{{ project.priority|lower }}">
+                  {{ project.get_priority_display }}
+                </span>
+              </td>
+ 
+              <td class="text-center">
+                <span class="rp-badge-level rp-badge-level--{{ project.confidence|lower }}">
+                  {{ project.get_confidence_display }}
+                </span>
+              </td>
+ 
+              <td class="text-center" style="font-size:12.5px;white-space:nowrap">
+                {{ project.tentative_start_date|date:"d M Y"|default:"—" }}
+              </td>
+ 
+              <td class="text-center" style="font-size:12.5px;white-space:nowrap">
+                {{ project.tentative_end_date|date:"d M Y"|default:"—" }}
+              </td>
+ 
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{% url 'projects:detail' project.pk %}"
+                     class="btn btn-ghost-icon" title="View">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <a href="{% url 'projects:edit' project.pk %}"
+                     class="btn btn-ghost-icon" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-secondary mb-0" style="font-size:13px">
+        No active projects assigned to or collaborating with this team.
+        <a href="{% url 'projects:create' %}">Create one</a>.
+      </p>
+      {% endif %}
+ 
+    </div>
+  </div>
+ 
 </div>
 {% endblock %}
 

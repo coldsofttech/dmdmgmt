@@ -29,6 +29,30 @@ class SkillDetailView(DetailView):
 
     def get_object(self, queryset=None):
         return SkillService.get_skill(self.kwargs['pk'])
+    
+    def get_context_data(self, **kwargs):
+        ctx   = super().get_context_data(**kwargs)
+        skill = self.get_object()
+ 
+        try:
+            from apps.team_members.models import TeamMember
+            members_qs = (
+                TeamMember.objects
+                .filter(skills=skill)
+                .select_related('team')
+                .order_by('last_name', 'first_name')
+            )
+            ctx['skill_members']       = members_qs
+            ctx['member_count']        = members_qs.count()
+            ctx['active_member_count'] = members_qs.filter(is_active=True).count()
+            ctx['inactive_member_count'] = members_qs.filter(is_active=False).count()
+        except Exception:
+            ctx['skill_members']       = []
+            ctx['member_count']        = 0
+            ctx['active_member_count'] = 0
+            ctx['inactive_member_count'] = 0
+ 
+        return ctx
 
 
 class SkillCreateView(CreateView):
