@@ -188,5 +188,14 @@ class TeamDetailView(DetailView):
             ctx['active_projects'] = ProjectService.get_team_active_projects(team.pk)
         except Exception:
             ctx['active_projects'] = []
+
+        # ── Leaves for this team in the current FY ────────
+        try:
+            from apps.leaves.services import LeaveService
+            ctx['team_leaves'] = LeaveService.get_team_leaves_current_fy(team.pk)
+            ctx['active_fy']   = LeaveService.get_active_fy()
+        except Exception:
+            ctx['team_leaves'] = []
+            ctx['active_fy']   = None
  
         return ctx

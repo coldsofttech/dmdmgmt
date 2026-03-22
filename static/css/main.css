@@ -796,6 +796,76 @@ a:hover { text-decoration: underline; }
   top:            -1px;
 }
 
+/* ── Leave days badge ────────────────────────────────────────
+   Used in leave tables and the leave detail page to show
+   the number of leave days in a compact coloured pill.
+   Default (base): muted purple/indigo to distinguish from
+   holiday pills (orange) and FY days-remaining pills (blue).
+   ──────────────────────────────────────────────────────────── */
+.rp-leave-days-badge {
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         2px 9px;
+  border-radius:   20px;
+  font-size:       12px;
+  font-weight:     600;
+  font-family:     var(--font-mono, 'DM Mono', monospace);
+  letter-spacing:  0.02em;
+  white-space:     nowrap;
+  background:      #eef2ff;
+  border:          1px solid #c7d2fe;
+  color:           #4338ca;
+}
+ 
+/* Total row in leave table — slightly stronger emphasis */
+.rp-leave-days-badge--total {
+  background:  #e0e7ff;
+  border-color: #a5b4fc;
+  color:        #3730a3;
+  font-size:    13px;
+  padding:      3px 11px;
+}
+
+.rp-leave-days-badge--warning {
+  background:  #f3cbb2;
+  border-color: #c58b66;
+  color:        #92400e;
+  font-size:    13px;
+  padding:      3px 11px;
+}
+ 
+/* ── Leaves table current-row highlight ──────────────────────
+   Applied in leave_detail.html's "other leaves" table to mark
+   the record currently being viewed.
+   ──────────────────────────────────────────────────────────── */
+#leaves-table tbody tr.table-active td:first-child,
+.rp-table tbody tr.table-active td:first-child {
+  border-left:  3px solid var(--color-primary, #6366f1);
+  padding-left: calc(0.75rem - 3px);
+}
+ 
+/* ── Leave summary line on stat card ─────────────────────────
+   Used in team_member_detail.html Capacity card to show
+   total leave days for the active FY inline in the dl list.
+   ──────────────────────────────────────────────────────────── */
+.rp-leave-summary {
+  display:     flex;
+  align-items: center;
+  gap:         6px;
+  font-size:   13px;
+}
+ 
+/* ── Team leaves table header accent ─────────────────────────
+   Subtle left border on the heading of a leaves table embedded
+   inside team_detail.html or team_member_detail.html cards.
+   ──────────────────────────────────────────────────────────── */
+.rp-card-heading--leaves {
+  border-left: 3px solid #818cf8;
+  padding-left: 8px;
+}
+ 
+
 /* ── Utilities ────────────────────────────────────────── */
 .fw-500 { font-weight: 500; }
 .fw-600 { font-weight: 600; }

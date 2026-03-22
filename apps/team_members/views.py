@@ -37,9 +37,27 @@ class TeamMemberDetailView(DetailView):
         return TeamMemberService.get_member(self.kwargs['pk'])
 
     def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx['history']    = TeamMemberService.get_team_history(self.kwargs['pk'])
-        ctx['move_form']  = MoveTeamForm(member=self.get_object())
+        ctx    = super().get_context_data(**kwargs)
+        member = self.get_object()
+
+        ctx['history']   = TeamMemberService.get_team_history(self.kwargs['pk'])
+        ctx['move_form'] = MoveTeamForm(member=member)
+
+        # ── Leaves for the active FY ──────────────────────
+        try:
+            from apps.leaves.services import LeaveService
+            active_fy        = LeaveService.get_active_fy()
+            member_leaves    = LeaveService.get_member_leaves_current_fy(member.pk)
+            leave_total_days = sum(l.days for l in member_leaves)
+ 
+            ctx['active_fy']        = active_fy
+            ctx['member_leaves']    = member_leaves
+            ctx['leave_total_days'] = leave_total_days
+        except Exception:
+            ctx['active_fy']        = None
+            ctx['member_leaves']    = []
+            ctx['leave_total_days'] = 0
+
         return ctx
 
 

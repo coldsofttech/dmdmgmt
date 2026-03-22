@@ -167,7 +167,7 @@
 </div>
 
 <!-- ── Active Projects section ── -->
-  <div class="col-12">
+  <div class="col-12 mb-3">
     <div class="rp-card">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h6 class="rp-card-heading mb-0">
@@ -283,6 +283,62 @@
       </p>
       {% endif %}
  
+    </div>
+  </div>
+
+  <!-- ── Team Leaves — full width ── -->
+  <div class="col-12">
+    <div class="rp-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="rp-card-heading mb-0 rp-card-heading--leaves">
+          Planned leaves
+          {% if active_fy %}<span class="rp-hint ms-1">{{ active_fy.long_fy }}</span>{% endif %}
+          {% if team_leaves %}<span class="rp-badge rp-badge--muted ms-2">{{ team_leaves|length }}</span>{% endif %}
+        </h6>
+        <a href="{% url 'leaves:create' %}" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-plus me-1"></i>Add leave
+        </a>
+      </div>
+      {% if team_leaves %}
+      <div class="rp-table-wrap" style="box-shadow:none;border:none">
+        <table class="table rp-table mb-0">
+          <thead>
+            <tr>
+              <th>Member</th>
+              <th>Start date</th>
+              <th>End date</th>
+              <th class="text-center">Days</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for leave in team_leaves %}
+            <tr>
+              <td>
+                <a href="{% url 'team_members:detail' leave.team_member.pk %}" class="rp-link fw-500">
+                  {{ leave.team_member.display_name }}
+                </a>
+              </td>
+              <td style="white-space:nowrap;font-size:13px">{{ leave.start_date|date:"D, d M Y" }}</td>
+              <td style="white-space:nowrap;font-size:13px">{{ leave.end_date|date:"D, d M Y" }}</td>
+              <td class="text-center"><span class="rp-leave-days-badge">{{ leave.days }}d</span></td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{% url 'leaves:detail' leave.pk %}" class="btn btn-ghost-icon" title="View"><i class="bi bi-eye"></i></a>
+                  <a href="{% url 'leaves:edit' leave.pk %}" class="btn btn-ghost-icon" title="Edit"><i class="bi bi-pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-secondary mb-0" style="font-size:13px">
+        No planned leaves for members of this team{% if active_fy %} in {{ active_fy.long_fy }}{% endif %}.
+        <a href="{% url 'leaves:create' %}">Add one</a>.
+      </p>
+      {% endif %}
     </div>
   </div>
  

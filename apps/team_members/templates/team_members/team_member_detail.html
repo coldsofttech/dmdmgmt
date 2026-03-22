@@ -160,6 +160,98 @@
     </div>
   </div>
 
+  <!-- ── Leaves section — full width ── -->
+  <div class="col-12">
+    <div class="rp-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="rp-card-heading mb-0">
+          Planned leaves
+          {% if active_fy %}
+          <span class="rp-hint ms-1">{{ active_fy.long_fy }}</span>
+          {% endif %}
+          {% if member_leaves %}
+          <span class="rp-badge rp-badge--muted ms-2">{{ member_leaves|length }}</span>
+          {% endif %}
+        </h6>
+        <a href="{% url 'leaves:create' %}?member={{ member.pk }}"
+           class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-plus me-1"></i>Add leave
+        </a>
+      </div>
+ 
+      {% if member_leaves %}
+      <div class="rp-table-wrap" style="box-shadow:none;border:none">
+        <table class="table rp-table mb-0">
+          <thead>
+            <tr>
+              <th>Start date</th>
+              <th>End date</th>
+              <th class="text-center">Days</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for leave in member_leaves %}
+            <tr>
+              <td style="white-space:nowrap;font-size:13px">
+                {{ leave.start_date|date:"D, d M Y" }}
+              </td>
+              <td style="white-space:nowrap;font-size:13px">
+                {{ leave.end_date|date:"D, d M Y" }}
+              </td>
+              <td class="text-center">
+                <span class="rp-leave-days-badge">{{ leave.days }}d</span>
+              </td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{% url 'leaves:detail' leave.pk %}"
+                     class="btn btn-ghost-icon" title="View">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <a href="{% url 'leaves:edit' leave.pk %}"
+                     class="btn btn-ghost-icon" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <button class="btn btn-ghost-icon btn-ghost-icon--danger" title="Delete"
+                          onclick="deleteLeave({{ leave.pk }}, '{{ leave|escapejs }}')">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" class="text-secondary" style="font-size:12.5px">
+                <i class="bi bi-info-circle me-1"></i>Total planned leave days
+              </td>
+              <td class="text-center">
+                {% if leave_total_days >= member.default_holidays %}
+                <span class="rp-leave-days-badge rp-leave-days-badge--total rp-leave-days-badge--warning">
+                  {{ leave_total_days }}d
+                </span>
+                {% else %}
+                <span class="rp-leave-days-badge rp-leave-days-badge--total">
+                  {{ leave_total_days }}d
+                </span>
+                {% endif %}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-secondary mb-0" style="font-size:13px">
+        No planned leaves for {{ active_fy.long_fy|default:"the current financial year" }}.
+        <a href="{% url 'leaves:create' %}?member={{ member.pk }}">Add one now</a>.
+      </p>
+      {% endif %}
+ 
+    </div>
+  </div>
+
 </div>
 
 <!-- Move team modal -->
@@ -246,4 +338,5 @@
 
 {% block extra_js %}
 <script src="{% static 'js/team_members.js' %}"></script>
+<script src="{% static 'js/leaves.js' %}"></script>
 {% endblock %}

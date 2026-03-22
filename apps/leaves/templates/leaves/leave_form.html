@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+  {% if is_create %}Add Leave{% else %}Edit Leave{% endif %} — Demand Management
+{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center gap-3">
+  {% if locked_member %}
+  <a href="{% url 'team_members:detail' locked_member.pk %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  {% elif not is_create %}
+  <a href="{% url 'team_members:detail' leave.team_member.pk %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  {% else %}
+  <a href="{% url 'leaves:list' %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  {% endif %}
+  <div>
+    <h1 class="rp-page-title">
+      {% if is_create %}Add Leave{% else %}Edit Leave{% endif %}
+    </h1>
+    {% if locked_member %}
+    <p class="rp-page-subtitle">
+      Adding leave for <span class="rp-code">{{ locked_member.display_name }}</span>
+    </p>
+    {% elif not is_create %}
+    <p class="rp-page-subtitle">
+      Editing leave for <span class="rp-code">{{ leave.team_member.display_name }}</span>
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-5">
+    <div class="rp-card">
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% if locked_member %}
+        <input type="hidden" name="_member_pk" value="{{ locked_member.pk }}">
+        {% endif %}
+        {% if locked_fy %}
+        <input type="hidden" name="_fy_pk" value="{{ locked_fy.pk }}">
+        {% endif %}
+
+        <!-- Team member -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.team_member.id_for_label }}">
+            Team member <span class="rp-required">*</span>
+          </label>
+
+          {% if locked_member %}
+          <div class="rp-locked-field d-flex align-items-center gap-2">
+            <span class="rp-value-pill"
+                  style="font-size:14px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8">
+              {{ locked_member.display_name }}
+            </span>
+            <span class="rp-badge rp-badge--muted">
+              <i class="bi bi-lock-fill me-1"></i>Fixed
+            </span>
+          </div>
+          {% if locked_member.team %}
+          <p class="rp-hint mt-1">Team: {{ locked_member.team.name }}</p>
+          {% endif %}
+
+          {% else %}
+          <select id="{{ form.team_member.id_for_label }}"
+                  name="{{ form.team_member.html_name }}"
+                  class="form-select rp-select {% if form.team_member.errors %}is-invalid{% endif %}">
+            <option value="">— Select team member —</option>
+            {% for m in form.fields.team_member.queryset %}
+            <option value="{{ m.pk }}"
+              {% if form.team_member.value|stringformat:"s" == m.pk|stringformat:"s" %}selected{% endif %}>
+              {{ m.display_name }}{% if m.team %} ({{ m.team.name }}){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          {% if form.team_member.errors %}
+          <div class="invalid-feedback d-block">{{ form.team_member.errors.0 }}</div>
+          {% endif %}
+          {% endif %}
+        </div>
+
+        <!-- Financial year -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.financial_year.id_for_label }}">
+            Financial year <span class="rp-required">*</span>
+          </label>
+
+          {% if locked_fy %}
+          <div class="rp-locked-field d-flex align-items-center gap-2">
+            <span class="rp-value-pill"
+                  style="font-size:14px;background:#f0fdf4;border-color:#bbf7d0;color:#15803d">
+              {{ locked_fy.long_fy }}
+            </span>
+            <span class="rp-badge rp-badge--muted">
+              <i class="bi bi-lock-fill me-1"></i>Fixed
+            </span>
+          </div>
+          <p class="rp-hint mt-1">
+            {{ locked_fy.start_date|date:"d M Y" }} → {{ locked_fy.end_date|date:"d M Y" }}
+          </p>
+
+          {% else %}
+          <select id="{{ form.financial_year.id_for_label }}"
+                  name="{{ form.financial_year.html_name }}"
+                  class="form-select rp-select {% if form.financial_year.errors %}is-invalid{% endif %}"
+                  onchange="onFyChange(this.value)">
+            <option value="">— Select financial year —</option>
+            {% for fy in form.fields.financial_year.queryset %}
+            <option value="{{ fy.pk }}"
+              {% if form.financial_year.value|stringformat:"s" == fy.pk|stringformat:"s" %}selected{% endif %}>
+              {{ fy.long_fy }}{% if fy.is_active %} (Active){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          {% if form.financial_year.errors %}
+          <div class="invalid-feedback d-block">{{ form.financial_year.errors.0 }}</div>
+          {% endif %}
+          {% endif %}
+        </div>
+
+        <!-- Start date -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.start_date.id_for_label }}">
+            Start date <span class="rp-required">*</span>
+          </label>
+          <input type="date"
+                 id="{{ form.start_date.id_for_label }}"
+                 name="{{ form.start_date.html_name }}"
+                 value="{{ form.start_date.value|date:'Y-m-d'|default:'' }}"
+                 class="form-control rp-input {% if form.start_date.errors %}is-invalid{% endif %}"
+                 oninput="calcDays()" />
+          {% if form.start_date.errors %}
+          <div class="invalid-feedback d-block">{{ form.start_date.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <!-- End date -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.end_date.id_for_label }}">
+            End date <span class="rp-required">*</span>
+          </label>
+          <input type="date"
+                 id="{{ form.end_date.id_for_label }}"
+                 name="{{ form.end_date.html_name }}"
+                 value="{{ form.end_date.value|date:'Y-m-d'|default:'' }}"
+                 class="form-control rp-input {% if form.end_date.errors %}is-invalid{% endif %}"
+                 oninput="calcDays()" />
+          {% if form.end_date.errors %}
+          <div class="invalid-feedback d-block">{{ form.end_date.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Working days preview -->
+        <div class="rp-field mb-5">
+          <label class="rp-label">Working days (auto-calculated)</label>
+          <div class="rp-value-pill rp-value-pill--lg" id="days-display"
+               style="font-size:16px;background:#f0fdf4;border-color:#bbf7d0;color:#15803d">
+            {% if not is_create %}{{ leave.days }}d{% else %}—{% endif %}
+          </div>
+          <p class="rp-hint mt-1" id="days-breakdown" style="font-size:11.5px">
+            Excludes weekends and public holidays in the selected financial year.
+          </p>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          {% for err in form.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>
+            {% if is_create %}Add leave{% else %}Save changes{% endif %}
+          </button>
+
+          {% if locked_member %}
+          <a href="{% url 'team_members:detail' locked_member.pk %}"
+             class="btn btn-outline-secondary">Cancel</a>
+
+          {% elif not is_create %}
+          <a href="{% url 'team_members:detail' leave.team_member.pk %}"
+             class="btn btn-outline-secondary">Cancel</a>
+          <button type="button"
+                  class="btn btn-outline-danger ms-auto"
+                  onclick="deleteLeave({{ leave.pk }}, '{{ leave|escapejs }}')">
+            <i class="bi bi-trash me-1"></i>Delete
+          </button>
+
+          {% else %}
+          <a href="{% url 'leaves:list' %}" class="btn btn-outline-secondary">Cancel</a>
+          {% endif %}
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- Tips -->
+  <div class="col-lg-4 offset-lg-1 mt-4 mt-lg-0">
+    <div class="rp-card rp-card--muted">
+      <h6 class="fw-600 mb-3"><i class="bi bi-info-circle me-2"></i>Tips</h6>
+      <ul class="rp-tip-list">
+        <li>Both dates must fall within the selected financial year.</li>
+        <li><strong>Working days</strong> is calculated automatically by subtracting weekends and any public holidays in the selected FY that fall within the date range.</li>
+        <li>To update or add public holidays for a FY, go to <a href="{% url 'holidays:list' %}">Settings → Holidays</a>.</li>
+        <li>This is a <strong>forecast</strong> — you can add planned leave in advance.</li>
+      </ul>
+    </div>
+    {% if not is_create %}
+    <div class="rp-card rp-card--muted mt-3">
+      <h6 class="fw-600 mb-2"><i class="bi bi-clock-history me-2"></i>Metadata</h6>
+      <dl class="rp-meta-list">
+        <dt>Created</dt><dd>{{ leave.created_at|date:"d M Y, H:i" }}</dd>
+        <dt>Updated</dt><dd>{{ leave.updated_at|date:"d M Y, H:i" }}</dd>
+      </dl>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% if not is_create %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete leave?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-leave-name"></strong> will be permanently removed.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window._deleteRedirectUrl = "{% url 'team_members:detail' leave.team_member.pk %}";
+</script>
+{% endif %}
+
+<script>
+  window._initialFyPk = "{{ locked_fy.pk|default:form.financial_year.value|default:'' }}";
+</script>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/leaves.js' %}"></script>
+<script>
+  // Initialise on load — fetches holidays for the pre-selected FY then calculates
+  (async () => {
+    if (window._initialFyPk) {
+      await loadHolidaysForFy(window._initialFyPk);
+    }
+    calcDays();
+  })();
+</script>
+{% endblock %}

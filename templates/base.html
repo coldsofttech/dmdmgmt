@@ -131,6 +131,10 @@
    
     <div class="rp-sidebar-section">
       <p class="rp-sidebar-label">Plan</p>
+      <a href="{% url 'leaves:list' %}"
+         class="rp-sidebar-link {% if request.resolver_match.app_name == 'leaves' %}active{% endif %}">
+        <i class="bi bi-calendar2-minus"></i> Leaves
+      </a>
       <a href="#" class="rp-sidebar-link">
         <i class="bi bi-calendar3-range"></i> Sprints
       </a>
