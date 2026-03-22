@@ -703,6 +703,58 @@ a:hover { text-decoration: underline; }
   color:      #475569;
 }
 
+/* ── Stat card sub-line ─────────────────────────────────────
+   Sits directly beneath .rp-stat-value inside an .rp-stat-card.
+   Allows a secondary data point (e.g. "days remaining") without
+   breaking the existing card layout.
+   ──────────────────────────────────────────────────────────── */
+.rp-stat-sub {
+  display:     block;
+  margin-top:  4px;
+  font-size:   11.5px;
+  font-weight: 400;
+  line-height: 1.35;
+  color:       var(--color-text-2, #64748b);
+}
+ 
+/* ── Days-remaining pill ────────────────────────────────────
+   A small inline pill wrapping the "N days remaining" text.
+   Base style is neutral; modifiers apply urgency colour.
+   ──────────────────────────────────────────────────────────── */
+.rp-days-pill {
+  display:         inline-flex;
+  align-items:     center;
+  gap:             4px;
+  padding:         2px 8px;
+  border-radius:   20px;
+  font-size:       11.5px;
+  font-weight:     500;
+  letter-spacing:  0.01em;
+  border:          1px solid transparent;
+  white-space:     nowrap;
+}
+ 
+/* Neutral — plenty of time left (> 90 days) */
+.rp-days-pill--ok {
+  background: var(--color-surface-2, #f1f5f9);
+  border-color: var(--color-border, #e2e8f0);
+  color: var(--color-text-2, #64748b);
+}
+ 
+/* Amber — getting close (31 – 90 days) */
+.rp-days-pill--warn {
+  background:  #fffbeb;
+  border-color: #fde68a;
+  color:        #92400e;
+}
+ 
+/* Red — urgent (0 – 30 days) or overdue */
+.rp-days-pill--danger {
+  background:  #fef2f2;
+  border-color: #fecaca;
+  color:        #991b1b;
+}
+
 /* ── Utilities ────────────────────────────────────────── */
 .fw-500 { font-weight: 500; }
 .fw-600 { font-weight: 600; }

@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+  {% if is_create %}New Financial Year{% else %}Edit {{ fy.long_fy }}{% endif %} — Demand Management
+{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center gap-3">
+  <a href="{% url 'financial_years:list' %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <div>
+    <h1 class="rp-page-title">
+      {% if is_create %}New Financial Year{% else %}Edit {{ fy.long_fy }}{% endif %}
+    </h1>
+    {% if not is_create %}
+    <p class="rp-page-subtitle">
+      <span class="rp-code">{{ fy.short_fy }}</span>
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-6">
+    <div class="rp-card">
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <!-- Live label preview -->
+        <div class="rp-field mb-4">
+          <label class="rp-label">Financial year labels (auto-calculated)</label>
+          <div class="d-flex gap-3 align-items-center">
+            <div>
+              <div class="rp-hint mb-1">Long format</div>
+              <span class="rp-value-pill" id="preview-long"
+                    style="font-size:15px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8">
+                {% if not is_create %}{{ fy.long_fy }}{% else %}FY????-????{% endif %}
+              </span>
+            </div>
+            <div>
+              <div class="rp-hint mb-1">Short format</div>
+              <span class="rp-value-pill" id="preview-short"
+                    style="font-size:15px;background:#f0fdf4;border-color:#bbf7d0;color:#15803d">
+                {% if not is_create %}{{ fy.short_fy }}{% else %}FY??-??{% endif %}
+              </span>
+            </div>
+          </div>
+          <p class="rp-hint mt-2">
+            Labels are derived from the start and end years and update live as you pick dates.
+          </p>
+        </div>
+
+        <hr class="mb-4" style="border-color:var(--color-border)" />
+
+        <!-- Start date -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.start_date.id_for_label }}">
+            Start date <span class="rp-required">*</span>
+          </label>
+          <input type="date"
+                 id="{{ form.start_date.id_for_label }}"
+                 name="{{ form.start_date.html_name }}"
+                 value="{{ form.start_date.value|date:'Y-m-d'|default:'' }}"
+                 class="form-control rp-input {% if form.start_date.errors %}is-invalid{% endif %}"
+                 oninput="updateFYPreview()" />
+          {% if form.start_date.errors %}
+          <div class="invalid-feedback d-block">{{ form.start_date.errors.0 }}</div>
+          {% endif %}
+          <p class="rp-hint mt-1">e.g. 2025-04-01 for a UK financial year starting 1 April.</p>
+        </div>
+
+        <!-- End date -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.end_date.id_for_label }}">
+            End date <span class="rp-required">*</span>
+          </label>
+          <input type="date"
+                 id="{{ form.end_date.id_for_label }}"
+                 name="{{ form.end_date.html_name }}"
+                 value="{{ form.end_date.value|date:'Y-m-d'|default:'' }}"
+                 class="form-control rp-input {% if form.end_date.errors %}is-invalid{% endif %}"
+                 oninput="updateFYPreview()" />
+          {% if form.end_date.errors %}
+          <div class="invalid-feedback d-block">{{ form.end_date.errors.0 }}</div>
+          {% endif %}
+          <p class="rp-hint mt-1">e.g. 2026-03-31 for the same UK financial year.</p>
+        </div>
+
+        <!-- Active toggle -->
+        <div class="rp-field mb-4">
+          <div class="form-check form-switch rp-switch">
+            <input class="form-check-input" type="checkbox"
+                   id="{{ form.is_active.id_for_label }}"
+                   name="{{ form.is_active.html_name }}"
+                   {% if form.is_active.value %}checked{% endif %} />
+            <label class="form-check-label rp-label"
+                   for="{{ form.is_active.id_for_label }}">
+              Active financial year
+            </label>
+          </div>
+          {% if form.is_active.errors %}
+          <div class="text-danger" style="font-size:12.5px">{{ form.is_active.errors.0 }}</div>
+          {% endif %}
+          <p class="rp-hint mt-1">
+            Only one financial year can be active. Use the
+            <strong>Set as Active</strong> button on the list or detail page
+            to switch cleanly between years.
+          </p>
+        </div>
+
+        <!-- Notes -->
+        <div class="rp-field mb-5">
+          <label class="rp-label" for="{{ form.notes.id_for_label }}">Notes</label>
+          <textarea id="{{ form.notes.id_for_label }}"
+                    name="{{ form.notes.html_name }}"
+                    class="form-control rp-input"
+                    rows="3"
+                    placeholder="Optional notes about this financial year.">{{ form.notes.value|default:'' }}</textarea>
+        </div>
+
+        <!-- Non-field errors -->
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          {% for err in form.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>
+            {% if is_create %}Create{% else %}Save changes{% endif %}
+          </button>
+          <a href="{% url 'financial_years:list' %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- Tips -->
+  <div class="col-lg-4 offset-lg-1 mt-4 mt-lg-0">
+    <div class="rp-card rp-card--muted">
+      <h6 class="fw-600 mb-3"><i class="bi bi-info-circle me-2"></i>Tips</h6>
+      <ul class="rp-tip-list">
+        <li>UK financial years typically run <strong>1 April → 31 March</strong>.</li>
+        <li><strong>Long FY</strong> (e.g. FY2025-2026) and <strong>Short FY</strong> (e.g. FY25-26) are auto-generated from the start and end years — you can't edit them directly.</li>
+        <li>Only one year can be <strong>Active</strong> at a time. Use the Set Active button on the list to switch years without validation conflicts.</li>
+        <li>The active year is shown in the top navbar dropdown so users know which year's data they are viewing.</li>
+      </ul>
+    </div>
+
+    {% if not is_create %}
+    <div class="rp-card rp-card--muted mt-3">
+      <h6 class="fw-600 mb-2"><i class="bi bi-clock-history me-2"></i>Metadata</h6>
+      <dl class="rp-meta-list">
+        <dt>Created</dt><dd>{{ fy.created_at|date:"d M Y, H:i" }}</dd>
+        <dt>Last updated</dt><dd>{{ fy.updated_at|date:"d M Y, H:i" }}</dd>
+      </dl>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateFYPreview() {
+  const startVal = document.getElementById('{{ form.start_date.id_for_label }}').value;
+  const endVal   = document.getElementById('{{ form.end_date.id_for_label }}').value;
+  const longEl   = document.getElementById('preview-long');
+  const shortEl  = document.getElementById('preview-short');
+
+  if (startVal && endVal) {
+    const startYr = new Date(startVal).getFullYear();
+    const endYr   = new Date(endVal).getFullYear();
+    longEl.textContent  = `FY${startYr}-${endYr}`;
+    shortEl.textContent = `FY${String(startYr).slice(2)}-${String(endYr).slice(2)}`;
+  } else {
+    longEl.textContent  = 'FY????-????';
+    shortEl.textContent = 'FY??-??';
+  }
+}
+</script>
+{% endblock %}

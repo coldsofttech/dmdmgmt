@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'apps.configurations',
     'apps.team_members',
     'apps.projects',
+    'apps.financial_years',
 ]
 
 MIDDLEWARE = [
@@ -68,6 +69,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.financial_years.context_processors.financial_years_context',
             ],
         },
     },

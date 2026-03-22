@@ -39,35 +39,61 @@
             <i class="bi bi-speedometer2 me-1"></i>Dashboard
           </a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.resolver_match.app_name == 'teams' %}active{% endif %}" href="{% url 'teams:list' %}">
-            <i class="bi bi-people-fill me-1"></i>Teams
+        <!-- ── Financial Years dropdown ── -->
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle d-flex align-items-center gap-1
+             {% if request.resolver_match.app_name == 'financial_years' %}active{% endif %}"
+             href="#" role="button" data-bs-toggle="dropdown">
+            <i class="bi bi-calendar3 me-1"></i>
+            {% if active_fy %}
+              {{ active_fy.short_fy }}
+            {% else %}
+              Financial Years
+            {% endif %}
           </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.resolver_match.app_name == 'team_members' %}active{% endif %}" href="{% url 'team_members:list' %}">
-            <i class="bi bi-person-badge me-1"></i>Members
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.resolver_match.app_name == 'projects' %}active{% endif %}" href="{% url 'projects:list' %}">
-            <i class="bi bi-kanban-fill me-1"></i>Projects
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#">
-            <i class="bi bi-calendar3-range me-1"></i>Sprints
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#">
-            <i class="bi bi-bar-chart-steps me-1"></i>Planning
-          </a>
-        </li>
-        <li class="nav-item ms-2">
-          <a class="nav-link" href="#">
-            <i class="bi bi-wallet2 me-1"></i>Budgets
-          </a>
+          <ul class="dropdown-menu dropdown-menu-end" style="min-width:220px">
+ 
+            <!-- Active year indicator -->
+            {% if active_fy %}
+            <li>
+              <div class="px-3 py-2 d-flex align-items-center gap-2">
+                <span class="rp-badge rp-badge--success" style="font-size:10.5px">Active</span>
+                <span class="fw-500" style="font-size:13px">{{ active_fy.long_fy }}</span>
+              </div>
+            </li>
+            <li><hr class="dropdown-divider my-1"></li>
+            {% endif %}
+ 
+            <!-- All financial years -->
+            {% for fy in all_financial_years %}
+            <li>
+              <a class="dropdown-item d-flex align-items-center justify-content-between
+                 {% if fy.is_active %}fw-500{% endif %}"
+                 href="{% url 'financial_years:detail' fy.pk %}">
+                <span>{{ fy.long_fy }}</span>
+                <span class="text-secondary" style="font-size:11.5px">{{ fy.short_fy }}</span>
+              </a>
+            </li>
+            {% empty %}
+            <li>
+              <span class="dropdown-item text-secondary" style="font-size:13px">
+                No financial years yet
+              </span>
+            </li>
+            {% endfor %}
+ 
+            <li><hr class="dropdown-divider my-1"></li>
+            <li>
+              <a class="dropdown-item" href="{% url 'financial_years:list' %}">
+                <i class="bi bi-list-ul me-2"></i>All financial years
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{% url 'financial_years:create' %}">
+                <i class="bi bi-plus me-2"></i>New financial year
+              </a>
+            </li>
+          </ul>
         </li>
       </ul>
     </div>
@@ -90,10 +116,15 @@
       <a href="{% url 'projects:list' %}" class="rp-sidebar-link {% if request.resolver_match.app_name == 'projects' %}active{% endif %}">
         <i class="bi bi-kanban"></i> Projects
       </a>
+      <a href="{% url 'financial_years:list' %}"
+         class="rp-sidebar-link {% if request.resolver_match.app_name == 'financial_years' %}active{% endif %}">
+        <i class="bi bi-calendar3"></i> Financial Years
+      </a>
       <a href="#" class="rp-sidebar-link">
         <i class="bi bi-wallet2"></i> Budgets
       </a>
     </div>
+   
     <div class="rp-sidebar-section">
       <p class="rp-sidebar-label">Plan</p>
       <a href="#" class="rp-sidebar-link">
