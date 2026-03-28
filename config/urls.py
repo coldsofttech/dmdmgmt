@@ -26,6 +26,7 @@ from apps.financial_years.api_views import FinancialYearViewSet
 from apps.holidays.api_views import HolidayViewSet
 from apps.leaves.api_views import LeaveViewSet
 from apps.budgets.api_views import BudgetViewSet
+from apps.sprints.api_views import SprintViewSet
 
 router = DefaultRouter()
 router.register(r'teams', TeamViewSet, basename='team')
@@ -37,6 +38,7 @@ router.register(r'financial-years', FinancialYearViewSet, basename='financial-ye
 router.register(r'holidays', HolidayViewSet, basename='holiday')
 router.register(r'leaves', LeaveViewSet, basename='leave')
 router.register(r'budgets', BudgetViewSet, basename='budget')
+router.register(r'sprints', SprintViewSet, basename='sprint')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -54,6 +56,7 @@ urlpatterns = [
 
     # Plan
     path('leaves/', include('apps.leaves.urls')),
+    path('sprints/', include('apps.sprints.urls')),
 
     # Config / Settings
     path('settings/skills/', include('apps.skills.urls')),

@@ -33,6 +33,16 @@ class FinancialYearListView(ListView):
             ctx['active_fy_days_remaining'] = None
  
         return ctx
+        # ctx    = super().get_context_data(**kwargs)
+        # qs     = self.get_queryset()
+        # ctx['total_count'] = qs.count()
+        # ctx['active_fy']   = FinancialYearService.get_active()
+ 
+        # # Days remaining in active FY — uses the model property (handles None)
+        # active = ctx['active_fy']
+        # ctx['active_fy_days_remaining'] = active.days_remaining if active else None
+ 
+        # return ctx
 
 
 class FinancialYearDetailView(View):

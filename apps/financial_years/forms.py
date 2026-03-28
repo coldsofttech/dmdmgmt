@@ -33,6 +33,14 @@ class FinancialYearForm(forms.ModelForm):
         self.fields['is_active'].help_text = (
             'Only one financial year can be active at a time.'
         )
+        # super().__init__(*args, **kwargs)
+        # self.fields['start_date'].localize      = False
+        # self.fields['start_date'].input_formats = ['%Y-%m-%d']
+        # self.fields['is_active'].help_text = (
+        #     'Only one financial year can be active at a time. '
+        #     'Use the Set as Active button on the detail page to switch cleanly.'
+        # )
+        # self.fields['notes'].required = False
 
     def clean(self):
         cleaned    = super().clean()
@@ -64,3 +72,18 @@ class FinancialYearForm(forms.ModelForm):
                 )
 
         return cleaned
+        # cleaned    = super().clean()
+ 
+        # # is_active uniqueness check
+        # if cleaned.get('is_active'):
+        #     qs = FinancialYear.objects.filter(is_active=True)
+        #     if self.instance.pk:
+        #         qs = qs.exclude(pk=self.instance.pk)
+        #     if qs.exists():
+        #         self.add_error(
+        #             'is_active',
+        #             'Another financial year is already active. '
+        #             'Use "Set as Active" on the detail page to switch cleanly.'
+        #         )
+ 
+        # return cleaned

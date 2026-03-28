@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% load static sprint_extras %}
+
+{% block title %}Sprints — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-start justify-content-between flex-wrap gap-3">
+  <div>
+    <h1 class="rp-page-title">Sprints</h1>
+    <p class="rp-page-subtitle">
+      Sprint schedule for
+      {% if selected_fy %}{{ selected_fy.long_fy }}{% else %}all financial years{% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if selected_fy and total_count > 0 %}
+    <button class="btn btn-outline-danger btn-sm"
+            onclick="confirmDeleteFY({{ selected_fy.pk }}, '{{ selected_fy.long_fy|escapejs }}')">
+      <i class="bi bi-trash me-1"></i>Delete all sprints
+    </button>
+    {% endif %}
+    <a href="{% url 'sprints:create' %}{% if selected_fy %}?fy={{ selected_fy.pk }}{% endif %}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-plus me-1"></i>Add single sprint
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Total sprints</span>
+      <span class="rp-stat-value">{{ total_count }}</span>
+    </div>
+  </div>
+  {% if active_fy %}
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Active FY</span>
+      <span class="rp-stat-value">{{ active_fy.short_fy }}</span>
+    </div>
+  </div>
+  {% endif %}
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Sprint duration</span>
+      <span class="rp-stat-value">
+        {{ sprint_duration }}<span style="font-size:13px;font-weight:400">d</span>
+      </span>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="rp-stat-card">
+      <span class="rp-stat-label">Numbering from</span>
+      <span class="rp-stat-value">{{ sprint_start_number }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- FY selector + Generate form -->
+<div class="rp-card mb-4">
+  <div class="d-flex gap-4 align-items-start flex-wrap">
+
+    <!-- FY selector -->
+    <div class="flex-shrink-0" style="min-width:190px">
+      <label class="rp-label d-block mb-1">View financial year</label>
+      <select class="form-select rp-select"
+              onchange="window.location.href='{% url 'sprints:list' %}?fy='+this.value">
+        <option value="">— All FYs —</option>
+        {% for fy in financial_years %}
+        <option value="{{ fy.pk }}"
+                {% if selected_fy and fy.pk == selected_fy.pk %}selected{% endif %}>
+          {{ fy.long_fy }}{% if fy.is_active %} (Active){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="d-none d-md-block"
+         style="width:1px;background:var(--color-border,#e2e8f0);align-self:stretch"></div>
+
+    <!-- Generate form -->
+    <div class="flex-grow-1">
+      <label class="rp-label d-block mb-1">
+        <i class="bi bi-lightning-charge-fill text-primary me-1"></i>
+        Generate sprints automatically
+      </label>
+      <form method="post" class="d-flex gap-2 flex-wrap align-items-start">
+        {% csrf_token %}
+
+        <div>
+          <select name="financial_year"
+                  class="form-select rp-select {% if generate_form.financial_year.errors %}is-invalid{% endif %}"
+                  style="min-width:185px">
+            <option value="">— Financial year —</option>
+            {% for fy in financial_years %}
+            <option value="{{ fy.pk }}"
+                    {% if selected_fy and fy.pk == selected_fy.pk %}selected{% endif %}>
+              {{ fy.long_fy }}{% if fy.is_active %} (Active){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          {% if generate_form.financial_year.errors %}
+          <div class="text-danger mt-1" style="font-size:11.5px">
+            {{ generate_form.financial_year.errors.0 }}
+          </div>
+          {% endif %}
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-sm" style="margin-top:2px">
+          <i class="bi bi-lightning-charge me-1"></i>Generate
+        </button>
+      </form>
+      <p class="rp-hint mt-2 mb-0">
+        Start date is taken from the FY's own start date (advanced to the nearest Monday).
+        Sprints are {{ sprint_duration }} working days each (14 calendar days).
+        Numbered automatically from the last sprint in the system + 1.
+        Existing sprints for this FY block generation (delete first).
+        <a href="{% url 'configurations:list' %}" class="rp-link">Change in Settings →</a>
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<!-- Consistency warnings -->
+{% if warnings %}
+<div class="alert alert-warning d-flex gap-2 mb-3" style="font-size:13px">
+  <i class="bi bi-exclamation-triangle-fill mt-1 flex-shrink-0"></i>
+  <div>
+    <strong>
+      {{ warnings|length }} scheduling inconsistenc{{ warnings|length|pluralize:"y,ies" }} detected
+    </strong>
+    <ul class="mb-0 mt-1 ps-3">
+      {% for w in warnings %}
+      <li><strong>{{ w.sprint_name }}</strong>: {{ w.issue }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<!-- Sprint table -->
+{% if sprints %}
+<div class="rp-table-wrap">
+  <table class="table rp-table" id="sprints-table">
+    <thead>
+      <tr>
+        <th>Sprint</th>
+        <th>Start date</th>
+        <th>End date</th>
+        <th class="text-center">Month</th>
+        <th class="text-center"
+            title="Total calendar days from start to end (inclusive)">
+          Cal. days
+        </th>
+        <th class="text-center" title="Public holidays within this sprint">
+          Holidays
+        </th>
+        <th class="text-center"
+            title="Mon–Fri days, minus public holidays">
+          Working days
+        </th>
+        <th class="text-center"
+            title="Active members × Working days − Leave days overlapping this sprint">
+          Net capacity
+        </th>
+        <th class="text-center">Status</th>
+        <th class="text-center">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sprint in sprints %}
+      {% with cap=capacities|get_item:sprint.pk %}
+
+      <tr data-sprint-id="{{ sprint.pk }}"
+          class="{% if sprint.is_active %}rp-sprint-row--active{% endif %}{% if sprint.pk in warned_sprint_ids %} rp-sprint-row--warning{% endif %}">
+
+        <!-- Sprint name + flag badges -->
+        <td class="fw-500">
+          <a href="{% url 'sprints:detail' sprint.pk %}" class="rp-link">
+            {{ sprint.name }}
+          </a>
+          {% if sprint.is_overridden %}
+          <span class="rp-badge rp-badge--warning ms-1"
+                style="font-size:10px;padding:1px 5px"
+                title="Manually overridden — dates or name differ from generated values">
+            <i class="bi bi-pencil-fill"></i>
+          </span>
+          {% endif %}
+          {% if sprint.pk in warned_sprint_ids %}
+          <span class="rp-badge ms-1"
+                style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:10px;padding:1px 5px"
+                title="Scheduling inconsistency — see warning above">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+          </span>
+          {% endif %}
+        </td>
+
+        <td style="font-size:13px;white-space:nowrap">
+          {{ sprint.start_date|date:"D, d M Y" }}
+        </td>
+
+        <td style="font-size:13px;white-space:nowrap">
+          {{ sprint.end_date|date:"D, d M Y" }}
+        </td>
+
+        <td class="text-center">
+          <span class="rp-badge rp-badge--muted">{{ sprint.month }}</span>
+        </td>
+
+        <td class="text-center" style="font-size:13px">
+          {{ sprint.calendar_days }}
+        </td>
+
+        <td class="text-center">
+          {% if sprint.holiday_count > 0 %}
+          <span class="rp-badge"
+                style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412">
+            {{ sprint.holiday_count }}
+          </span>
+          {% else %}
+          <span class="text-secondary">—</span>
+          {% endif %}
+        </td>
+
+        <td class="text-center fw-500">{{ sprint.working_days }}</td>
+
+        <!-- Net capacity — cap is from capacities|get_item:sprint.pk -->
+        <td class="text-center">
+          {% if cap %}
+            <span class="rp-sprint-capacity"
+                  title="{{ cap.member_count }} members × {{ cap.working_days }}d working{% if cap.leave_days > 0 %} − {{ cap.leave_days }}d leave{% endif %}">
+              {{ cap.net_capacity }}d
+            </span>
+            {% if cap.leave_days > 0 %}
+            <div class="text-secondary" style="font-size:10.5px;margin-top:1px">
+              −{{ cap.leave_days }}d leave
+            </div>
+            {% endif %}
+          {% else %}
+          <span class="text-secondary">—</span>
+          {% endif %}
+        </td>
+
+        <!-- Status badge -->
+        <td class="text-center">
+          {% if sprint.is_active %}
+          <span class="rp-badge rp-badge--success">
+            <i class="bi bi-play-circle-fill me-1"></i>Active
+          </span>
+          {% elif sprint.status == 'COMPLETED' %}
+          <span class="rp-badge rp-badge--muted">Completed</span>
+          {% else %}
+          <span class="rp-badge rp-badge--sprint-future">Future</span>
+          {% endif %}
+        </td>
+
+        <!-- Actions -->
+        <td class="text-center">
+          <div class="d-flex justify-content-center gap-1">
+            <a href="{% url 'sprints:detail' sprint.pk %}"
+               class="btn btn-ghost-icon" title="View">
+              <i class="bi bi-eye"></i>
+            </a>
+            <a href="{% url 'sprints:edit' sprint.pk %}"
+               class="btn btn-ghost-icon" title="Edit">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <button class="btn btn-ghost-icon btn-ghost-icon--danger" title="Delete"
+                    onclick="deleteSprint({{ sprint.pk }}, '{{ sprint.name|escapejs }}')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </td>
+
+      </tr>
+      {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="rp-card text-center py-5 text-secondary">
+  <i class="bi bi-calendar3-range display-6 d-block mb-2 opacity-25"></i>
+  {% if selected_fy %}
+  No sprints yet for {{ selected_fy.long_fy }}.
+  Use the <strong>Generate sprints</strong> form above to create them automatically,
+  or <a href="{% url 'sprints:create' %}?fy={{ selected_fy.pk }}">add a single sprint</a>.
+  {% else %}
+  Select a financial year above, then generate or add sprints.
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Delete single sprint modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete sprint?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-sprint-name"></strong> will be permanently removed.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete all sprints for FY modal -->
+<div class="modal fade" id="deleteFYModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">
+          <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>
+          Delete all sprints for this FY?
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          All sprints for <strong id="delete-fy-name"></strong> will be permanently removed.
+          This cannot be undone. You can then regenerate with different settings.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-fy-btn">Delete all sprints</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/sprints.js' %}"></script>
+{% endblock %}

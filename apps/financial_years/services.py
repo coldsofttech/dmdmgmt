@@ -3,6 +3,8 @@ from django.db import transaction
 
 from .models import FinancialYear
 
+import datetime
+
 
 class FinancialYearService:
     @staticmethod
@@ -45,6 +47,14 @@ class FinancialYearService:
         fy.full_clean()
         fy.save()
         return fy
+    
+    # @staticmethod
+    # @transaction.atomic
+    # def set_end_date(fy_id: int, end_date: datetime.date) -> FinancialYear:
+    #     fy = FinancialYear.objects.get(pk=fy_id)
+    #     fy.end_date = end_date
+    #     fy.save()   # triggers _calculate_labels()
+    #     return fy
 
     @staticmethod
     @transaction.atomic

@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'apps.holidays',
     'apps.leaves',
     'apps.budgets',
+    'apps.sprints',
 ]
 
 MIDDLEWARE = [

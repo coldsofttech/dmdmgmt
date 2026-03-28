@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ sprint.name }} — Sprints — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'sprints:list' %}?fy={{ sprint.financial_year.pk }}"
+       class="btn btn-ghost-icon">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h1 class="rp-page-title d-flex align-items-center gap-2 flex-wrap">
+        {{ sprint.name }}
+        {% if sprint.is_active %}
+        <span class="rp-badge rp-badge--success">
+          <i class="bi bi-play-circle-fill me-1"></i>Active
+        </span>
+        {% elif sprint.status == 'COMPLETED' %}
+        <span class="rp-badge rp-badge--muted">Completed</span>
+        {% else %}
+        <span class="rp-badge rp-badge--sprint-future">Future</span>
+        {% endif %}
+        {% if sprint.is_overridden %}
+        <span class="rp-badge rp-badge--warning">
+          <i class="bi bi-pencil-fill me-1"></i>Overridden
+        </span>
+        {% endif %}
+      </h1>
+      <p class="rp-page-subtitle">
+        {{ sprint.start_date|date:"d M Y" }} → {{ sprint.end_date|date:"d M Y" }}
+        <span class="text-secondary ms-2">·</span>
+        <span class="rp-code ms-1">{{ sprint.financial_year.short_fy }}</span>
+        <span class="text-secondary ms-2">·</span>
+        <span class="ms-1">{{ sprint.calendar_days }} calendar days</span>
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'sprints:edit' sprint.pk %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-pencil me-1"></i>Edit
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  <!-- Left: Sprint details -->
+  <div class="col-lg-4">
+    <div class="rp-card mb-3">
+      <h6 class="rp-card-heading">Sprint details</h6>
+      <dl class="rp-meta-list">
+        <dt>Sprint number</dt>
+        <dd>{{ sprint.sprint_number }}</dd>
+
+        <dt>Name</dt>
+        <dd>{{ sprint.name }}</dd>
+
+        <dt>Financial year</dt>
+        <dd>
+          <a href="{% url 'financial_years:detail' sprint.financial_year.pk %}" class="rp-link">
+            <span class="rp-value-pill"
+                  style="font-size:13px;background:#f0fdf4;border-color:#bbf7d0;color:#15803d">
+              {{ sprint.financial_year.long_fy }}
+            </span>
+          </a>
+        </dd>
+
+        <dt>Start date</dt>
+        <dd>{{ sprint.start_date|date:"D, d M Y" }}</dd>
+
+        <dt>End date</dt>
+        <dd>{{ sprint.end_date|date:"D, d M Y" }}</dd>
+
+        <dt>Month</dt>
+        <dd><span class="rp-badge rp-badge--muted">{{ sprint.month }}</span></dd>
+
+        <dt>Calendar days</dt>
+        <dd>{{ sprint.calendar_days }}</dd>
+
+        <dt>Public holidays</dt>
+        <dd>
+          {% if sprint.holiday_count > 0 %}
+          <span class="rp-badge"
+                style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412">
+            {{ sprint.holiday_count }}
+          </span>
+          {% else %}
+          <span class="text-secondary">0</span>
+          {% endif %}
+        </dd>
+
+        <dt>Working days</dt>
+        <dd><span class="fw-500">{{ sprint.working_days }}</span>
+          <span class="text-secondary ms-1" style="font-size:12px">
+            (Mon–Fri minus holidays)
+          </span>
+        </dd>
+
+        {% if sprint.notes %}
+        <dt>Notes</dt>
+        <dd class="text-secondary" style="font-size:13px">{{ sprint.notes }}</dd>
+        {% endif %}
+
+        <dt>Created</dt>
+        <dd>{{ sprint.created_at|date:"d M Y, H:i" }}</dd>
+
+        <dt>Updated</dt>
+        <dd>{{ sprint.updated_at|date:"d M Y, H:i" }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- Right: Capacity breakdown -->
+  <div class="col-lg-8">
+    <div class="rp-card">
+      <h6 class="rp-card-heading">Capacity breakdown</h6>
+
+      <dl class="rp-meta-list">
+
+        <dt>Active members</dt>
+        <dd>{{ capacity.member_count }}</dd>
+
+        <dt>Working days (this sprint)</dt>
+        <dd>{{ capacity.working_days }}</dd>
+
+        <dt>Gross capacity</dt>
+        <dd>
+          <span class="text-secondary" style="font-size:12.5px">
+            {{ capacity.member_count }} members
+            × {{ capacity.working_days }} working days
+            = <strong>{{ capacity.gross_days }}d</strong>
+          </span>
+        </dd>
+
+        <dt>Leave days (overlapping)</dt>
+        <dd>
+          {% if capacity.leave_days > 0 %}
+          <span class="rp-leave-days-badge">−{{ capacity.leave_days }}d</span>
+          {% else %}
+          <span class="text-secondary">0d</span>
+          {% endif %}
+        </dd>
+
+        <dt>Net capacity</dt>
+        <dd>
+          <span class="rp-sprint-capacity rp-sprint-capacity--lg">
+            {{ capacity.net_capacity }}d
+          </span>
+          {% if capacity.leave_days > 0 %}
+          <span class="text-secondary ms-2" style="font-size:12px">
+            ({{ capacity.gross_days }}d − {{ capacity.leave_days }}d leave)
+          </span>
+          {% endif %}
+        </dd>
+
+      </dl>
+
+      <p class="rp-hint mt-3 mb-0">
+        <i class="bi bi-info-circle me-1"></i>
+        Net capacity = active members × working days − overlapping leave days.
+        Working days excludes public holidays within the sprint window.
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

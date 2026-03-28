@@ -118,7 +118,28 @@ CONFIGURATION_DEFAULTS = {
             'Used to calculate project total cost: '
             'estimate_days × day_price × (1 + contingency%).'
         ),
-    }
+    },
+    'SPRINT_DURATION_DAYS': {
+        'label':       'Sprint duration (working days)',
+        'value':       '10',
+        'description': (
+            'Number of Mon–Fri working days in each generated sprint. '
+            'Default is 10 (a standard 2-week sprint). '
+            'Public holidays within the sprint are counted as working days for '
+            'duration purposes (the sprint still spans that many Mon–Fri slots). '
+            'Working capacity shown in the sprint list excludes holidays.'
+        ),
+    },
+    'SPRINT_START_NUMBER': {
+        'label':       'Sprint start number',
+        'value':       '1',
+        'description': (
+            'The sprint number to start from when generating sprints for a new '
+            'financial year. Set this to your current sprint number if you are '
+            'joining an existing sprint sequence (e.g. set to 170 if your team '
+            'is currently on Sprint 170).'
+        ),
+    },
     # ── Add future built-in configs below ─────────────────
     # 'SPRINT_LENGTH_DAYS': {
     #     'label':       'Default sprint length (days)',

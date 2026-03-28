@@ -89,6 +89,37 @@
           {% endif %}
           <p class="rp-hint mt-1">e.g. 2026-03-31 for the same UK financial year.</p>
         </div>
+        <!-- End date (read-only — set when sprints are generated) -->
+        <!-- <div class="rp-field mb-4">
+          <label class="rp-label">End date</label>
+          {% if not is_create and fy.end_date %}
+          <div class="d-flex align-items-center gap-2">
+            <div class="rp-value-pill"
+                 style="font-size:14px;background:#f0fdf4;border-color:#bbf7d0;color:#15803d">
+              {{ fy.end_date|date:"d M Y" }}
+            </div>
+            <span class="rp-badge rp-badge--success" style="font-size:11px">
+              <i class="bi bi-check-circle-fill me-1"></i>Set by sprints
+            </span>
+          </div>
+          {% else %}
+          <div class="d-flex align-items-center gap-2">
+            <div class="rp-value-pill"
+                 style="font-size:13px;background:#f8fafc;border-color:#e2e8f0;color:#94a3b8">
+              Not set yet
+            </div>
+            <span class="rp-badge rp-badge--muted" style="font-size:11px">
+              <i class="bi bi-calendar3-range me-1"></i>Auto-set when sprints are generated
+            </span>
+          </div>
+          {% endif %}
+          <p class="rp-hint mt-1">
+            The end date is set automatically to the last sprint's end date when you
+            <a href="{% url 'sprints:list' %}{% if not is_create %}?fy={{ fy.pk }}{% endif %}"
+               class="rp-link">generate sprints</a>.
+            You do not need to enter it manually.
+          </p>
+        </div> -->
 
         <!-- Active toggle -->
         <div class="rp-field mb-4">
@@ -151,6 +182,7 @@
       <ul class="rp-tip-list">
         <li>UK financial years typically run <strong>1 April → 31 March</strong>.</li>
         <li><strong>Long FY</strong> (e.g. FY2025-2026) and <strong>Short FY</strong> (e.g. FY25-26) are auto-generated from the start and end years — you can't edit them directly.</li>
+        <!-- <li><strong>End date is automatic.</strong> When you generate sprints for this financial year, the end date is set to the last sprint's end date. You never need to enter it manually.</li> -->
         <li>Only one year can be <strong>Active</strong> at a time. Use the Set Active button on the list to switch years without validation conflicts.</li>
         <li>The active year is shown in the top navbar dropdown so users know which year's data they are viewing.</li>
       </ul>
@@ -188,5 +220,20 @@ function updateFYPreview() {
     shortEl.textContent = 'FY??-??';
   }
 }
+// function updateFYPreview() {
+//   const startVal = document.getElementById('{{ form.start_date.id_for_label }}').value;
+//   const longEl   = document.getElementById('preview-long');
+//   const shortEl  = document.getElementById('preview-short');
+ 
+//   if (startVal) {
+//     const startYr = new Date(startVal + 'T00:00:00').getFullYear();
+//     const endYr   = startYr + 1;
+//     longEl.textContent  = `FY${startYr}-${endYr}`;
+//     shortEl.textContent = `FY${String(startYr).slice(2)}-${String(endYr).slice(2)}`;
+//   } else {
+//     longEl.textContent  = 'FY????-????';
+//     shortEl.textContent = 'FY??-??';
+//   }
+// }
 </script>
 {% endblock %}
