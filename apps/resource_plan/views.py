@@ -1,6 +1,7 @@
 import datetime
+from decimal import Decimal
 from django.views.generic import ListView, View
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
@@ -16,6 +17,8 @@ from .services import (
     PlanProjectTeamService, PlanPhaseService,
     PlanAssignmentService, CellService,
     ConflictService, PlaceholderLeaveService, GridService,
+    AutoAllocationEngine, OverflowResolutionService,
+    InterimReplacementService, ExportService,
 )
 from .forms import (
     ResourcePlanForm, ResourcePlanProjectForm,
@@ -84,11 +87,15 @@ class ResourcePlanCreateView(View):
             })
         try:
             cd   = form.cleaned_data
+            status    = cd.get('status') or ResourcePlan.Status.DRAFT
+            threshold = cd.get('allocation_threshold_pct') or Decimal('10.00')
             plan = ResourcePlanService.create_plan({
                 'name':                     cd['name'],
                 'financial_year_id':        cd['financial_year'].pk,
-                'status':                   cd.get('status', ResourcePlan.Status.DRAFT),
-                'allocation_threshold_pct': cd.get('allocation_threshold_pct', 10),
+                # 'status':                   cd.get('status', ResourcePlan.Status.DRAFT),
+                # 'allocation_threshold_pct': cd.get('allocation_threshold_pct', Decimal('10.00')),
+                'status':                   status,
+                'allocation_threshold_pct': threshold,
                 'scope_notes':              cd.get('scope_notes', ''),
             })
             messages.success(request, f'Resource plan "{plan.name}" created.')
@@ -895,3 +902,180 @@ class ResourcePlanPlaceholderCreateView(View):
             return JsonResponse({'ok': True, 'id': ph.pk, 'days': str(ph.days), 'created': created})
         except Exception as exc:
             return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Phase 3 — Auto-allocation engine view
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanRunEngineView(View):
+    """
+    POST /resource-plan/<pk>/run-engine/
+    Body: { "dry_run": true|false }
+    Runs AutoAllocationEngine and returns a JSON summary.
+    """
+
+    def post(self, request, pk):
+        import json
+        try:
+            plan = ResourcePlanService.get_plan(pk)
+            if plan.status == ResourcePlan.Status.LOCKED:
+                return JsonResponse(
+                    {'ok': False, 'detail': 'Plan is locked.'},
+                    status=403,
+                )
+            body    = json.loads(request.body) if request.body else {}
+            dry_run = bool(body.get('dry_run', False))
+            result  = AutoAllocationEngine.run(plan_id=pk, dry_run=dry_run)
+            if not dry_run:
+                messages.success(
+                    request,
+                    f'Auto-allocation complete: {result.cells_written} cells written, '
+                    f'{result.conflicts_raised} conflicts raised.',
+                )
+            return JsonResponse({
+                'ok':      True,
+                'dry_run': dry_run,
+                **result.to_dict(),
+            })
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Phase 3 — Conflict resolution view
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanResolveConflictView(View):
+    """
+    POST /resource-plan/<plan_pk>/conflicts/<conflict_pk>/resolve/
+    Body: {
+      "resolution": "PUSHED_RIGHT"|"SPLIT"|"REPLACED"|"PLACEHOLDER"|
+                    "DEPRIORITISED"|"DISMISSED",
+      "sprint_offset":      int       (PUSHED_RIGHT),
+      "split_days":         "5.0"     (SPLIT),
+      "new_member_id":      int       (REPLACED),
+      "placeholder_name":   str       (PLACEHOLDER),
+    }
+    """
+
+    def post(self, request, plan_pk, conflict_pk):
+        import json
+        try:
+            body       = json.loads(request.body) if request.body else {}
+            resolution = body.get('resolution', '').strip()
+            if not resolution:
+                return JsonResponse(
+                    {'ok': False, 'detail': '"resolution" is required.'},
+                    status=400,
+                )
+            extra = {
+                'sprint_offset':    int(body['sprint_offset'])  if 'sprint_offset'    in body else 1,
+                'split_days':       body.get('split_days', '0'),
+                'new_member_id':    body.get('new_member_id'),
+                'placeholder_name': body.get('placeholder_name', 'ENGINEER TBC'),
+            }
+            conflict = OverflowResolutionService.apply_resolution(
+                conflict_id=int(conflict_pk),
+                resolution=resolution,
+                extra=extra,
+            )
+            # Return updated pending conflict count
+            pending = ResourcePlanConflict.objects.filter(
+                plan_id=plan_pk,
+                resolution=ResourcePlanConflict.Resolution.PENDING,
+            ).count()
+            return JsonResponse({
+                'ok':            True,
+                'conflict_id':   conflict.pk,
+                'resolution':    conflict.resolution,
+                'pending_count': pending,
+            })
+        except (ValidationError, Exception) as exc:
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return JsonResponse({'ok': False, 'detail': msg}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Phase 3 — Interim replacement view
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanInterimView(View):
+    """
+    POST /resource-plan/<plan_pk>/assignments/<assignment_pk>/interim/
+    Body: { "new_member_id": int, "sprint_id": int (optional) }
+    Creates an interim assignment covering the given engineer's absence.
+    """
+
+    def post(self, request, plan_pk, assignment_pk):
+        import json
+        try:
+            body          = json.loads(request.body) if request.body else {}
+            new_member_id = body.get('new_member_id')
+            sprint_id     = body.get('sprint_id')
+            if not new_member_id:
+                return JsonResponse(
+                    {'ok': False, 'detail': '"new_member_id" is required.'},
+                    status=400,
+                )
+            plan     = ResourcePlanService.get_plan(plan_pk)
+            original = ResourcePlanAssignment.objects.select_related(
+                'phase', 'team_member'
+            ).get(pk=assignment_pk)
+
+            sprint = None
+            if sprint_id:
+                from apps.sprints.models import Sprint
+                sprint = Sprint.objects.get(pk=sprint_id)
+
+            interim = InterimReplacementService.create_interim(
+                phase_id               = original.phase_id,
+                replaces_assignment_id = original.pk,
+                team_member_id         = int(new_member_id),
+                plan                   = plan,
+                sprint                 = sprint,
+            )
+            return JsonResponse({
+                'ok':            True,
+                'interim_id':    interim.pk,
+                'interim_name':  interim.display_name,
+                'original_name': original.display_name,
+            })
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Phase 3 — Export view
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanExportView(View):
+    """
+    GET /resource-plan/<pk>/export/
+    Streams the plan as an .xlsx file download.
+    """
+
+    def get(self, request, pk):
+        try:
+            plan = ResourcePlanService.get_plan(pk)
+            buf  = ExportService.export_plan_xlsx(plan_id=pk)
+            filename = (
+                f'resource_plan_{plan.financial_year.short_fy}_'
+                f'{plan.name.replace(" ", "_")}.xlsx'
+            )
+            response = HttpResponse(
+                buf.read(),
+                content_type=(
+                    'application/vnd.openxmlformats-officedocument'
+                    '.spreadsheetml.sheet'
+                ),
+            )
+            response['Content-Disposition'] = (
+                f'attachment; filename="{filename}"'
+            )
+            return response
+        except Exception as exc:
+            messages.error(request, f'Export failed: {exc}')
+            return HttpResponseRedirect(
+                reverse('resource_plan:detail', args=[pk])
+            )

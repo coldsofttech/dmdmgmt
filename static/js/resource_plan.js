@@ -684,3 +684,257 @@ setViewMode = function(mode) {
     });
   }
 };
+
+
+/* ═══════════════════════════════════════════════════════
+   PHASE 3 — Auto-allocation engine (run + dry-run)
+   ═══════════════════════════════════════════════════════ */
+
+async function openEngineModal() {
+  const modal  = bootstrap.Modal.getOrCreateInstance(
+    document.getElementById('engineModal')
+  );
+  const body   = document.getElementById('engine-modal-body');
+  body.innerHTML = `
+    <div class="rp-field mb-3">
+      <div class="form-check form-switch">
+        <input type="checkbox" class="form-check-input" id="engine-dry-run" />
+        <label class="form-check-label rp-label" for="engine-dry-run">
+          Dry run — preview without writing cells
+        </label>
+      </div>
+      <p class="rp-hint mt-1">
+        Dry run shows how many cells would be written and any capacity conflicts,
+        without changing the grid. Run without dry run to apply.
+      </p>
+    </div>
+    <div id="engine-result" class="d-none"></div>
+    <div class="d-flex gap-2 mt-3">
+      <button class="btn btn-sm btn-primary" onclick="runEngine()">
+        <i class="bi bi-lightning-charge me-1"></i>Run
+      </button>
+      <button class="btn btn-sm btn-outline-secondary"
+              data-bs-dismiss="modal">Cancel</button>
+    </div>`;
+  modal.show();
+}
+
+async function runEngine() {
+  const dryRun  = document.getElementById('engine-dry-run')?.checked ?? false;
+  const resultEl = document.getElementById('engine-result');
+  if (resultEl) {
+    resultEl.innerHTML =
+      '<div class="text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Running…</div>';
+    resultEl.classList.remove('d-none');
+  }
+
+  try {
+    const res  = await fetch(window._engineUrl, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken':  window._csrfToken,
+      },
+      body: JSON.stringify({ dry_run: dryRun }),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      if (resultEl) resultEl.innerHTML =
+        `<div class="text-danger">${data.detail}</div>`;
+      return;
+    }
+
+    const overflowHtml = (data.overflow_suggestions || []).length
+      ? `<div class="mt-2">
+           <strong style="font-size:12px">Overflow suggestions:</strong>
+           <ul class="mb-0 mt-1 ps-3" style="font-size:12px">
+             ${(data.overflow_suggestions || []).slice(0, 8).map(o =>
+               `<li>${o.engineer} / ${o.sprint_name}: ${o.overflow_days}d over (${o.available_days}d avail)</li>`
+             ).join('')}
+             ${data.overflow_suggestions.length > 8
+               ? `<li class="text-secondary">+ ${data.overflow_suggestions.length - 8} more…</li>` : ''}
+           </ul>
+         </div>` : '';
+
+    if (resultEl) resultEl.innerHTML = `
+      <div class="rp-engine-result">
+        <div class="d-flex gap-3 flex-wrap mb-2">
+          <div class="rp-engine-stat">
+            <span class="rp-engine-stat-val text-success">${data.cells_written}</span>
+            <span class="rp-engine-stat-lbl">cells ${dryRun ? 'would be written' : 'written'}</span>
+          </div>
+          <div class="rp-engine-stat">
+            <span class="rp-engine-stat-val text-secondary">${data.cells_skipped}</span>
+            <span class="rp-engine-stat-lbl">skipped</span>
+          </div>
+          <div class="rp-engine-stat">
+            <span class="rp-engine-stat-val ${data.conflicts_raised > 0 ? 'text-danger' : 'text-success'}">
+              ${data.conflicts_raised}
+            </span>
+            <span class="rp-engine-stat-lbl">conflict${data.conflicts_raised !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="rp-engine-stat">
+            <span class="rp-engine-stat-val text-secondary">${data.engineers_tbc || 0}</span>
+            <span class="rp-engine-stat-lbl">TBC slots</span>
+          </div>
+        </div>
+        ${overflowHtml}
+        ${!dryRun ? `
+        <div class="mt-3 d-flex gap-2">
+          <button class="btn btn-sm btn-primary"
+                  onclick="bootstrap.Modal.getInstance(document.getElementById('engineModal'))?.hide(); location.reload();">
+            <i class="bi bi-check-lg me-1"></i>Done — refresh grid
+          </button>
+        </div>` : `
+        <div class="mt-3">
+          <button class="btn btn-sm btn-primary"
+                  onclick="document.getElementById('engine-dry-run').checked=false; runEngine();">
+            <i class="bi bi-lightning-charge me-1"></i>Apply (run for real)
+          </button>
+        </div>`}
+      </div>`;
+
+    _updateConflictBanner(data.conflicts_raised, []);
+
+  } catch (err) {
+    if (resultEl) resultEl.innerHTML =
+      `<div class="text-danger">Network error: ${err.message}</div>`;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   PHASE 3 — Conflict resolution
+   ═══════════════════════════════════════════════════════ */
+
+async function resolveConflict(conflictPk, resolution, extra) {
+  try {
+    const res  = await fetch(
+      `${window._resolveBase}${conflictPk}/resolve/`,
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken':  window._csrfToken,
+        },
+        body: JSON.stringify({ resolution, ...extra }),
+      }
+    );
+    const data = await res.json();
+
+    if (data.ok) {
+      // Remove the conflict row from the overflow panel
+      document.getElementById(`conflict-row-${conflictPk}`)?.remove();
+
+      // Update the conflict banner count
+      _updateConflictBanner(data.pending_count, []);
+
+      // If no more rows, hide the overflow panel
+      const rows = document.querySelectorAll('.rp-overflow-row');
+      if (!rows.length) {
+        document.getElementById('overflow-panel')?.classList.add('d-none');
+      }
+
+      _showFlash(`Conflict resolved: ${resolution.replace('_', ' ').toLowerCase()}.`, 'success');
+
+      // Reload if resolution may have changed cell data
+      if (['PUSHED_RIGHT', 'SPLIT', 'REPLACED', 'DEPRIORITISED'].includes(resolution)) {
+        setTimeout(() => location.reload(), 800);
+      }
+    } else {
+      _showFlash(data.detail || 'Resolution failed.', 'error');
+    }
+  } catch {
+    _showFlash('Network error.', 'error');
+  }
+}
+
+
+/* ── Split modal ──────────────────────────────────────── */
+
+let _splitConflictPk  = null;
+let _splitSprintPk    = null;
+
+function openSplitModal(conflictPk, sprintPk) {
+  _splitConflictPk = conflictPk;
+  _splitSprintPk   = sprintPk;
+
+  const modal  = bootstrap.Modal.getOrCreateInstance(
+    document.getElementById('splitModal')
+  );
+  const errEl  = document.getElementById('split-error');
+  const input  = document.getElementById('split-days-input');
+  if (errEl)  errEl.classList.add('d-none');
+  if (input)  input.value = '5';
+
+  const btn = document.getElementById('split-confirm-btn');
+  const newBtn = btn.cloneNode(true);
+  btn.replaceWith(newBtn);
+  newBtn.addEventListener('click', async () => {
+    const days = document.getElementById('split-days-input')?.value;
+    if (!days || parseFloat(days) < 0) {
+      const errEl = document.getElementById('split-error');
+      if (errEl) { errEl.textContent = 'Enter a valid number of days.'; errEl.classList.remove('d-none'); }
+      return;
+    }
+    bootstrap.Modal.getInstance(document.getElementById('splitModal'))?.hide();
+    await resolveConflict(_splitConflictPk, 'SPLIT', { split_days: days });
+  });
+
+  modal.show();
+}
+
+
+/* ── Interim modal ────────────────────────────────────── */
+
+let _interimAssignmentPk = null;
+let _interimSprintPk     = null;
+
+async function openInterimModal(planPk, assignmentPk, sprintPk) {
+  _interimAssignmentPk = assignmentPk;
+  _interimSprintPk     = sprintPk;
+
+  const modal  = bootstrap.Modal.getOrCreateInstance(
+    document.getElementById('interimModal')
+  );
+  const errEl  = document.getElementById('interim-error');
+  if (errEl) errEl.classList.add('d-none');
+
+  const btn    = document.getElementById('interim-confirm-btn');
+  const newBtn = btn.cloneNode(true);
+  btn.replaceWith(newBtn);
+  newBtn.addEventListener('click', async () => {
+    const memberId = document.getElementById('interim-member-select')?.value;
+    if (!memberId) {
+      const errEl = document.getElementById('interim-error');
+      if (errEl) { errEl.textContent = 'Select a team member.'; errEl.classList.remove('d-none'); }
+      return;
+    }
+    bootstrap.Modal.getInstance(document.getElementById('interimModal'))?.hide();
+
+    const res  = await fetch(
+      `${window._interimBase}${_interimAssignmentPk}/interim/`,
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken':  window._csrfToken,
+        },
+        body: JSON.stringify({
+          new_member_id: parseInt(memberId),
+          sprint_id:     _interimSprintPk || null,
+        }),
+      }
+    );
+    const data = await res.json();
+    if (data.ok) {
+      _showFlash(`Interim assigned: ${data.interim_name}`, 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      _showFlash(data.detail || 'Interim creation failed.', 'error');
+    }
+  });
+
+  modal.show();
+}

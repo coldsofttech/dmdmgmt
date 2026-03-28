@@ -51,6 +51,19 @@
       <span id="col-filter-badge" class="rp-badge rp-badge--muted ms-1 d-none"
             style="font-size:10px">0</span>
     </button>
+    {% if plan.status != 'LOCKED' %}
+    <button type="button" class="btn btn-sm btn-outline-primary"
+            id="btn-run-engine"
+            onclick="openEngineModal()"
+            title="Auto-allocate days across engineers based on ramp patterns">
+      <i class="bi bi-lightning-charge me-1"></i>Run engine
+    </button>
+    {% endif %}
+    <a href="{% url 'resource_plan:export' plan.pk %}"
+       class="btn btn-sm btn-outline-secondary"
+       title="Download plan as Excel (.xlsx)">
+      <i class="bi bi-download me-1"></i>Export
+    </a>
     <a href="{% url 'resource_plan:placeholders' plan.pk %}"
        class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-calendar2-plus me-1"></i>Projected leaves
@@ -109,6 +122,110 @@
 </div>
 {% else %}
 <div id="conflict-banner" class="d-none"></div>
+{% endif %}
+
+{# ── Overflow resolution panel (Phase 3) ── #}
+{% if conflicts %}
+<div id="overflow-panel" class="rp-overflow-panel mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="mb-0 fw-600" style="font-size:13px">
+      <i class="bi bi-tools me-2 text-primary"></i>Resolve conflicts
+    </h6>
+    <button class="btn-close btn-sm"
+            onclick="document.getElementById('overflow-panel').classList.add('d-none')"
+            style="font-size:10px"></button>
+  </div>
+  <div class="rp-overflow-rows" id="overflow-rows">
+    {% for c in conflicts %}
+    <div class="rp-overflow-row" id="conflict-row-{{ c.pk }}"
+         data-conflict="{{ c.pk }}"
+         data-type="{{ c.conflict_type }}"
+         data-sprint="{{ c.affected_sprint.pk|default:'' }}"
+         data-assignment="{{ c.affected_assignment.pk|default:'' }}">
+
+      <div class="rp-overflow-meta">
+        <span class="rp-badge
+          {% if c.severity == 'ERROR' %}rp-badge--danger{% else %}rp-badge--warning{% endif %}"
+              style="font-size:10px">{{ c.severity }}</span>
+        <span class="fw-500 ms-1" style="font-size:12.5px">
+          {{ c.get_conflict_type_display }}
+        </span>
+        {% if c.affected_sprint %}
+        <span class="rp-code ms-1" style="font-size:11px">
+          {{ c.affected_sprint.name }}
+        </span>
+        {% endif %}
+        {% if c.affected_assignment %}
+        <span class="text-secondary ms-1" style="font-size:11.5px">
+          — {{ c.affected_assignment.display_name }}
+        </span>
+        {% endif %}
+        <div class="text-secondary mt-1" style="font-size:11.5px">
+          {{ c.description }}
+        </div>
+      </div>
+
+      <div class="rp-overflow-actions">
+        {% if c.conflict_type == 'CAPACITY_EXCEEDED' %}
+
+        {# Push right #}
+        <div class="rp-overflow-action-group">
+          <button class="btn btn-xs btn-outline-secondary"
+                  onclick="resolveConflict({{ c.pk }}, 'PUSHED_RIGHT', {sprint_offset: 1})"
+                  title="Shift this phase 1 sprint to the right">
+            <i class="bi bi-arrow-right me-1"></i>Push right 1
+          </button>
+          <button class="btn btn-xs btn-outline-secondary"
+                  onclick="resolveConflict({{ c.pk }}, 'PUSHED_RIGHT', {sprint_offset: 2})"
+                  title="Shift this phase 2 sprints to the right">
+            Push right 2
+          </button>
+        </div>
+
+        {# Split #}
+        <button class="btn btn-xs btn-outline-secondary"
+                onclick="openSplitModal({{ c.pk }}, '{{ c.affected_sprint.pk|default:'' }}')"
+                title="Keep part of the allocation in this sprint, push remainder forward">
+          <i class="bi bi-scissors me-1"></i>Split
+        </button>
+
+        {# Assign interim #}
+        <button class="btn btn-xs btn-outline-secondary"
+                onclick="openInterimModal({{ plan.pk }}, {{ c.affected_assignment.pk|default:0 }}, {{ c.affected_sprint.pk|default:0 }})"
+                title="Assign a different engineer to cover this sprint">
+          <i class="bi bi-person-plus me-1"></i>Assign interim
+        </button>
+
+        {# Create TBC placeholder #}
+        <button class="btn btn-xs btn-outline-secondary"
+                onclick="resolveConflict({{ c.pk }}, 'PLACEHOLDER', {})"
+                title="Mark as TBC placeholder">
+          <i class="bi bi-person-fill-question me-1"></i>TBC
+        </button>
+
+        {# Deprioritise #}
+        <button class="btn btn-xs btn-outline-secondary"
+                onclick="resolveConflict({{ c.pk }}, 'DEPRIORITISED', {})"
+                title="Zero out this sprint and deprioritise">
+          <i class="bi bi-arrow-down-circle me-1"></i>Deprioritise
+        </button>
+
+        {% endif %}
+
+        {# Dismiss (all types) #}
+        <button class="btn btn-xs btn-ghost-icon"
+                onclick="resolveConflict({{ c.pk }}, 'DISMISSED', {})"
+                title="Dismiss — keep allocation unchanged">
+          <i class="bi bi-x"></i>
+        </button>
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div id="overflow-panel" class="d-none"></div>
 {% endif %}
 
 {# Unmapped projects banner #}
@@ -723,10 +840,13 @@
 
 {% block extra_js %}
 <script>
-  window._planPk       = {{ plan.pk }};
-  window._csrfToken    = '{{ csrf_token }}';
+  window._planPk         = {{ plan.pk }};
+  window._csrfToken      = '{{ csrf_token }}';
   window._cellUpdateBase = '/resource-plan/{{ plan.pk }}/cell/';
-  window._planLocked   = {{ plan.status|yesno:"false,false,false" }}{% if plan.status == 'LOCKED' %}; window._planLocked = true{% endif %};
+  window._planLocked     = {{ plan.status|yesno:"false,false,false" }}{% if plan.status == 'LOCKED' %}; window._planLocked = true{% endif %};
+  window._engineUrl      = '{% url "resource_plan:run_engine" plan.pk %}';
+  window._resolveBase    = '/resource-plan/{{ plan.pk }}/conflicts/';
+  window._interimBase    = '/resource-plan/{{ plan.pk }}/assignments/';
 
   /* Sprint metadata for the column filter (2.21) */
   window._sprintMeta = [
@@ -737,3 +857,92 @@
 </script>
 <script src="{% static 'js/resource_plan.js' %}"></script>
 {% endblock %}
+
+{# ── Engine result modal ── #}
+<div class="modal fade" id="engineModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:560px">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">
+          <i class="bi bi-lightning-charge me-2 text-primary"></i>Auto-allocation engine
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="engine-modal-body">
+        <div class="text-center py-4">
+          <span class="spinner-border me-2"></span>Running…
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Split capacity modal ── #}
+<div class="modal fade" id="splitModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Split allocation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-3" style="font-size:13px">
+          Keep this many days in the overflowing sprint.
+          The remainder will be added to the next sprint.
+        </p>
+        <div class="rp-field mb-3">
+          <label class="rp-label">Days to keep in overflow sprint</label>
+          <input type="number" id="split-days-input"
+                 class="form-control rp-input"
+                 step="0.25" min="0" max="10" value="5" />
+        </div>
+        <div id="split-error" class="text-danger d-none" style="font-size:12.5px"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="split-confirm-btn">
+          <i class="bi bi-scissors me-1"></i>Split
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Interim replacement modal ── #}
+<div class="modal fade" id="interimModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">
+          <i class="bi bi-person-plus me-2"></i>Assign interim engineer
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-3" style="font-size:13px">
+          Select a team member to cover this assignment in the affected sprint.
+          The original assignment's cell will be zeroed out for that sprint.
+        </p>
+        <div class="rp-field mb-3">
+          <label class="rp-label">Replacement engineer</label>
+          <select id="interim-member-select" class="form-select rp-select">
+            <option value="">— Select engineer —</option>
+            {% for member in available_members|default:'' %}
+            <option value="{{ member.pk }}">{{ member.display_name }}</option>
+            {% endfor %}
+          </select>
+          <p class="rp-hint mt-1">Only active team members are shown.</p>
+        </div>
+        <div id="interim-error" class="text-danger d-none" style="font-size:12.5px"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="interim-confirm-btn">
+          <i class="bi bi-person-plus me-1"></i>Assign interim
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
