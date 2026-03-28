@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Projects — {{ plan.name }} — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'resource_plan:configure' plan.pk %}" class="btn btn-ghost-icon">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h1 class="rp-page-title">Configured Projects</h1>
+      <p class="rp-page-subtitle">
+        {{ plan.name }}
+        <span class="rp-code ms-2">{{ plan.financial_year.short_fy }}</span>
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'resource_plan:configure' plan.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-plus me-1"></i>Add project
+    </a>
+    <a href="{% url 'resource_plan:detail' plan.pk %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-bar-chart-steps me-1"></i>View grid
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+{% if plan_projects %}
+<div class="rp-table-wrap">
+  <table class="table rp-table" id="projects-table">
+    <thead>
+      <tr>
+        <th>Programme / Project</th>
+        <th class="text-center">Basis</th>
+        <th class="text-end">Days required</th>
+        <th class="text-center">Priority</th>
+        <th class="text-center">Confidence</th>
+        <th class="text-center">Teams</th>
+        <th class="text-center">Phases</th>
+        <th class="text-center">Engineers</th>
+        <th class="text-center">Strict dates</th>
+        <th class="text-center">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for pp in plan_projects %}
+
+      {# Count teams, phases, assignments #}
+      {% with team_count=pp.project_teams.count %}
+      {% with phase_count=0 assign_count=0 %}
+
+      <tr data-pp-id="{{ pp.pk }}">
+
+        <td>
+          <div class="fw-500">
+            <a href="{% url 'projects:detail' pp.project.pk %}" class="rp-link">
+              {{ pp.project.project_name }}
+            </a>
+          </div>
+          {% if pp.project.programme_name %}
+          <div class="text-secondary" style="font-size:12px">{{ pp.project.programme_name }}</div>
+          {% endif %}
+          {% if pp.project.project_code %}
+          <span class="rp-code" style="font-size:11px">{{ pp.project.project_code }}</span>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          <span class="rp-badge rp-badge--muted" style="font-size:11px">
+            {{ pp.get_basis_display }}
+          </span>
+        </td>
+
+        <td class="text-end fw-500">
+          {% if pp.days_required %}{{ pp.days_required }}d{% else %}<span class="text-secondary">—</span>{% endif %}
+        </td>
+
+        <td class="text-center">
+          <span class="rp-badge-level rp-badge-level--{{ pp.effective_priority|lower }}">
+            {{ pp.effective_priority|title }}
+          </span>
+        </td>
+
+        <td class="text-center">
+          <span class="rp-badge-level rp-badge-level--{{ pp.effective_confidence|lower }}">
+            {{ pp.effective_confidence|title }}
+          </span>
+        </td>
+
+        <td class="text-center">
+          <span class="rp-badge rp-badge--muted">{{ pp.project_teams.count }}</span>
+        </td>
+
+        <td class="text-center">
+          {% with total_phases=0 %}
+          {% for ppt in pp.project_teams.all %}
+          {% endfor %}
+          {% endwith %}
+          {# Phase count via prefetch #}
+          <span class="rp-badge rp-badge--muted" id="phase-count-{{ pp.pk }}">
+            {% for ppt in pp.project_teams.all %}{{ ppt.phases.count }}{% endfor %}
+          </span>
+        </td>
+
+        <td class="text-center">
+          <span class="rp-badge rp-badge--muted" id="assign-count-{{ pp.pk }}">
+            {% for ppt in pp.project_teams.all %}{% for phase in ppt.phases.all %}{{ phase.assignments.count }}{% endfor %}{% endfor %}
+          </span>
+        </td>
+
+        <td class="text-center">
+          {% if pp.dates_strict %}
+          <span class="rp-badge" style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11px">
+            <i class="bi bi-lock-fill me-1"></i>Strict
+          </span>
+          {% else %}
+          <span class="text-secondary" style="font-size:12px">Flexible</span>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          <div class="d-flex justify-content-center gap-1">
+            <a href="{% url 'resource_plan:configure' plan.pk %}#pp-{{ pp.pk }}"
+               class="btn btn-ghost-icon" title="Configure teams & phases">
+              <i class="bi bi-gear"></i>
+            </a>
+            <a href="{% url 'resource_plan:project_edit' plan.pk pp.pk %}"
+               class="btn btn-ghost-icon" title="Edit project settings">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <button class="btn btn-ghost-icon btn-ghost-icon--danger" title="Remove from plan"
+                    onclick="removeProject({{ pp.pk }}, '{{ pp.project.project_name|escapejs }}')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </td>
+
+      </tr>
+      {% endwith %}
+      {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="rp-card text-center py-5 text-secondary">
+  <i class="bi bi-kanban display-6 d-block mb-2 opacity-25"></i>
+  No projects scoped yet.
+  <a href="{% url 'resource_plan:configure' plan.pk %}">Add projects in Configure</a>.
+</div>
+{% endif %}
+
+<!-- Remove confirmation modal -->
+<div class="modal fade" id="removeModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Remove project?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="remove-project-name"></strong> will be removed from this plan,
+          including all team assignments and cells.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-remove-btn">Remove</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const _planPk = {{ plan.pk }};
+const _csrf   = '{{ csrf_token }}';
+
+let _pendingPpPk = null;
+function removeProject(ppPk, name) {
+  _pendingPpPk = ppPk;
+  document.getElementById('remove-project-name').textContent = name;
+  const btn    = document.getElementById('confirm-remove-btn');
+  const newBtn = btn.cloneNode(true);
+  btn.replaceWith(newBtn);
+  newBtn.addEventListener('click', async () => {
+    bootstrap.Modal.getInstance(document.getElementById('removeModal'))?.hide();
+    const res  = await fetch(`/resource-plan/${_planPk}/projects/${_pendingPpPk}/delete/`, {
+      method: 'POST', headers: { 'X-CSRFToken': _csrf }
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.querySelector(`tr[data-pp-id="${_pendingPpPk}"]`)?.remove();
+    } else {
+      alert(data.detail || 'Remove failed.');
+    }
+  });
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('removeModal')).show();
+}
+</script>
+{% endblock %}

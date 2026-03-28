@@ -1,0 +1,244 @@
+{#
+  phase_form_modal.html
+  Rendered as an HTML fragment inside #phaseModalBody by ResourcePlanPhaseEditView.get()
+  Submitted via AJAX by _wirePhaseForm() in plan_configure.html.
+#}
+{% load static %}
+
+<form id="phase-edit-form" novalidate>
+  {% csrf_token %}
+
+  <div id="phase-edit-error"
+       class="alert alert-danger py-2 mb-3 d-none" style="font-size:12.5px"></div>
+
+  <!-- Name + sequence -->
+  <div class="row g-2 mb-3">
+    <div class="col-8">
+      <label class="rp-label">Phase name <span class="rp-required">*</span></label>
+      <input type="text" name="{{ form.name.html_name }}"
+             value="{{ form.name.value|default:'' }}"
+             class="form-control rp-input {% if form.name.errors %}is-invalid{% endif %}"
+             placeholder="e.g. Discovery, Build, UAT" />
+      {% if form.name.errors %}
+      <div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>
+      {% endif %}
+    </div>
+    <div class="col-4">
+      <label class="rp-label">Order</label>
+      <input type="number" name="{{ form.sequence_order.html_name }}"
+             value="{{ form.sequence_order.value|default:'1' }}"
+             min="1" class="form-control rp-input"
+             title="Phases with the same order run in parallel" />
+    </div>
+  </div>
+
+  <!-- ── Timelines (2.5) ── -->
+  <div class="row g-2 mb-3">
+    <div class="col-6">
+      <label class="rp-label">
+        Start sprint <span class="rp-required">*</span>
+        <i class="bi bi-info-circle text-secondary ms-1"
+           title="First sprint of this phase" style="font-size:11px"></i>
+      </label>
+      <select name="{{ form.start_sprint.html_name }}"
+              class="form-select rp-select {% if form.start_sprint.errors %}is-invalid{% endif %}">
+        <option value="">— Select —</option>
+        {% for s in form.fields.start_sprint.queryset %}
+        <option value="{{ s.pk }}"
+                {% if form.start_sprint.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>
+          {{ s.name }} ({{ s.start_date|date:"d M" }})
+        </option>
+        {% endfor %}
+      </select>
+      {% if form.start_sprint.errors %}
+      <div class="invalid-feedback d-block">{{ form.start_sprint.errors.0 }}</div>
+      {% endif %}
+    </div>
+    <div class="col-6">
+      <label class="rp-label">
+        End sprint <span class="rp-required">*</span>
+        <i class="bi bi-info-circle text-secondary ms-1"
+           title="Month is derived from the end sprint's end date" style="font-size:11px"></i>
+      </label>
+      <select name="{{ form.end_sprint.html_name }}"
+              class="form-select rp-select {% if form.end_sprint.errors %}is-invalid{% endif %}">
+        <option value="">— Select —</option>
+        {% for s in form.fields.end_sprint.queryset %}
+        <option value="{{ s.pk }}"
+                {% if form.end_sprint.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>
+          {{ s.name }} ({{ s.end_date|date:"d M" }})
+        </option>
+        {% endfor %}
+      </select>
+      {% if form.end_sprint.errors %}
+      <div class="invalid-feedback d-block">{{ form.end_sprint.errors.0 }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Ramp pattern (2.9) ── -->
+  <div class="rp-field mb-3">
+    <label class="rp-label">
+      Allocation pattern
+      <i class="bi bi-info-circle text-secondary ms-1"
+         title="Controls how days are spread across sprints in auto-allocation"
+         style="font-size:11px"></i>
+    </label>
+    <select name="{{ form.ramp_pattern.html_name }}"
+            class="form-select rp-select" onchange="updatePatternHint(this)">
+      {% for val, label in form.fields.ramp_pattern.choices %}
+      <option value="{{ val }}"
+              {% if form.ramp_pattern.value == val %}selected{% endif %}>
+        {{ label }}
+      </option>
+      {% endfor %}
+    </select>
+    <div class="rp-hint mt-1" id="pattern-hint-text">
+      <span id="pattern-hint"></span>
+    </div>
+    <!-- Visual ramp indicator (ASCII bar chart) -->
+    <div id="pattern-bars" class="d-flex gap-1 mt-2 align-items-end"
+         style="height:28px">
+    </div>
+  </div>
+
+  <!-- ── Max days per sprint (2.10) ── -->
+  <div class="rp-field mb-3">
+    <label class="rp-label">
+      Max days per sprint (cap)
+      <i class="bi bi-info-circle text-secondary ms-1"
+         title="Optional ceiling per sprint for this phase. Global cap is 10 days."
+         style="font-size:11px"></i>
+    </label>
+    <div class="d-flex align-items-center gap-2">
+      <input type="number" step="0.25" min="0" max="10"
+             name="{{ form.max_days_per_sprint.html_name }}"
+             value="{{ form.max_days_per_sprint.value|default:'' }}"
+             class="form-control rp-input" style="max-width:100px"
+             placeholder="10" />
+      <span class="text-secondary" style="font-size:12px">days (leave blank for no cap)</span>
+    </div>
+  </div>
+
+  <!-- ── Dependency (2.2) ── -->
+  <details class="mb-3">
+    <summary class="rp-label" style="cursor:pointer;list-style:none">
+      <i class="bi bi-diagram-2 me-1 text-secondary"></i>
+      Dependency on another phase (optional)
+    </summary>
+    <div class="row g-2 mt-2">
+      <div class="col-7">
+        <label class="rp-label">Predecessor phase</label>
+        <select name="{{ form.predecessor_phase.html_name }}"
+                class="form-select rp-select"
+                onchange="updateDependencyHint(this)">
+          <option value="">— None —</option>
+          {% for p in form.fields.predecessor_phase.queryset %}
+          <option value="{{ p.pk }}"
+                  {% if form.predecessor_phase.value|stringformat:"s" == p.pk|stringformat:"s" %}selected{% endif %}>
+            {{ p.name }} ({{ p.plan_project_team.team.name }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-5">
+        <label class="rp-label">Type</label>
+        <select name="{{ form.dependency_type.html_name }}"
+                class="form-select rp-select" id="dep-type-select"
+                onchange="updateDependencyHint(document.querySelector('[name=predecessor_phase]'))">
+          <option value="">— N/A —</option>
+          {% for val, label in form.fields.dependency_type.choices %}
+          {% if val %}
+          <option value="{{ val }}"
+                  {% if form.dependency_type.value == val %}selected{% endif %}>
+            {{ label }}
+          </option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div id="dep-hint" class="rp-hint mt-2 d-none"
+         style="font-size:12px;padding:6px 10px;background:#eff6ff;border-radius:6px;border:1px solid #bfdbfe;color:#1d4ed8">
+    </div>
+    <div class="mt-2" style="font-size:12px;color:#64748b">
+      <strong>SS</strong> (Start to Start) — Both phases begin at the same sprint.<br>
+      <strong>FS</strong> (Finish to Start) — This phase starts after predecessor ends.<br>
+      <strong>FF</strong> (Finish to Finish) — Both phases end at the same sprint.
+    </div>
+  </details>
+
+  <!-- Notes -->
+  <div class="rp-field mb-4">
+    <label class="rp-label">Notes</label>
+    <textarea name="{{ form.notes.html_name }}"
+              class="form-control rp-input" rows="2"
+              placeholder="Optional: scope, assumptions, constraints…">{{ form.notes.value|default:'' }}</textarea>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="button" id="save-phase-edit-btn" class="btn btn-sm btn-primary">
+      <i class="bi bi-check-lg me-1"></i>Save phase
+    </button>
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+            data-bs-dismiss="modal">Cancel</button>
+  </div>
+</form>
+
+<script>
+/* ── Ramp pattern visual (2.9) ── */
+const _PATTERNS = {
+  FLAT:           { hint: 'Distributes days evenly across all sprints in this phase.',
+                    bars: [5,5,5,5,5,5] },
+  RAMP_UP:        { hint: 'Gradually increases from a low allocation to full capacity.',
+                    bars: [1,2,3,5,6,7] },
+  RAMP_DOWN:      { hint: 'Starts at full capacity and gradually reduces.',
+                    bars: [7,6,5,3,2,1] },
+  RAMP_UP_DOWN:   { hint: 'Ramps up to a peak, holds steady, then ramps down.',
+                    bars: [1,3,5,5,3,1] },
+  RAMP_UP_STEADY: { hint: 'Ramps up to full capacity then holds steady.',
+                    bars: [1,2,4,5,5,5] },
+  STEADY_DOWN:    { hint: 'Holds steady at full capacity then gradually reduces.',
+                    bars: [5,5,5,4,2,1] },
+};
+
+function updatePatternHint(sel) {
+  const key     = sel.value;
+  const pattern = _PATTERNS[key] || _PATTERNS['FLAT'];
+  document.getElementById('pattern-hint').textContent = pattern.hint;
+
+  const container = document.getElementById('pattern-bars');
+  const maxVal    = Math.max(...pattern.bars);
+  container.innerHTML = pattern.bars.map(v => {
+    const pct = Math.round((v / maxVal) * 100);
+    return `<div style="width:20px;height:${pct}%;background:#6366f1;border-radius:3px 3px 0 0;
+                         min-height:4px;opacity:0.7" title="${v}d"></div>`;
+  }).join('');
+}
+
+/* ── Dependency type hint (2.2) ── */
+function updateDependencyHint(predSelect) {
+  const hintEl  = document.getElementById('dep-hint');
+  const typeVal = document.getElementById('dep-type-select')?.value;
+  if (!predSelect?.value || !typeVal) {
+    hintEl?.classList.add('d-none');
+    return;
+  }
+  const predText = predSelect.options[predSelect.selectedIndex]?.text || '';
+  const hints = {
+    SS: `This phase starts at the same sprint as "${predText}".`,
+    FS: `This phase can only start after "${predText}" has finished.`,
+    FF: `This phase finishes at the same sprint as "${predText}".`,
+  };
+  if (hintEl) {
+    hintEl.textContent = hints[typeVal] || '';
+    hintEl.classList.toggle('d-none', !hints[typeVal]);
+  }
+}
+
+/* Initialise on load */
+document.addEventListener('DOMContentLoaded', () => {
+  const patternSel = document.querySelector('[name="{{ form.ramp_pattern.html_name }}"]');
+  if (patternSel) updatePatternHint(patternSel);
+});
+</script>

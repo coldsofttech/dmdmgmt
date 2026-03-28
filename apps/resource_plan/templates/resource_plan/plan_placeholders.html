@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Projected Leaves — {{ plan.name }} — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'resource_plan:detail' plan.pk %}" class="btn btn-ghost-icon">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h1 class="rp-page-title">Projected Leaves</h1>
+      <p class="rp-page-subtitle">
+        {{ plan.name }}
+        <span class="rp-code ms-2">{{ plan.financial_year.short_fy }}</span>
+        <span class="text-secondary ms-2">·</span>
+        <span class="text-secondary ms-2" style="font-size:13px">
+          {{ total_ph }} placeholder row{{ total_ph|pluralize }}
+        </span>
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="post" action="{% url 'resource_plan:generate_placeholders' plan.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-clockwise me-1"></i>Re-generate
+      </button>
+    </form>
+    <button class="btn btn-primary btn-sm" onclick="openAddModal()">
+      <i class="bi bi-plus me-1"></i>Add manually
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="rp-card mb-3" style="background:#fffbeb;border-color:#fde68a">
+  <div class="d-flex gap-2 align-items-start" style="font-size:13px">
+    <i class="bi bi-info-circle-fill text-warning mt-1 flex-shrink-0"></i>
+    <div>
+      <strong>What are projected leaves?</strong>
+      These are placeholder leave days auto-generated for team members whose confirmed leaves
+      are fewer than the <strong>DEFAULT_HOLIDAYS</strong> setting (currently used for capacity
+      calculations). They are stored separately from actual leaves and never affect the Leaves
+      module. Edit or delete them as needed — re-generating overwrites them.
+    </div>
+  </div>
+</div>
+
+{% if grouped %}
+{% for grp in grouped %}
+<div class="rp-card mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <span class="fw-600" style="font-size:14px">{{ grp.member.display_name }}</span>
+      <span class="rp-badge rp-badge--muted ms-2" style="font-size:11px">
+        {{ grp.member.get_role_display }}
+      </span>
+      {% if grp.member.team %}
+      <span class="rp-tag ms-2" style="font-size:11px">{{ grp.member.team.name }}</span>
+      {% endif %}
+    </div>
+    <div>
+      <span class="text-secondary" style="font-size:12.5px">
+        Total projected: <strong>{{ grp.total_days }}d</strong>
+      </span>
+    </div>
+  </div>
+
+  <div class="rp-table-wrap" style="box-shadow:none;border:none">
+    <table class="table rp-table mb-0" style="font-size:13px">
+      <thead>
+        <tr>
+          <th>Sprint</th>
+          <th class="text-center">Days</th>
+          <th class="text-center">Source</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="ph-rows-{{ grp.member.pk }}">
+        {% for ph in grp.rows %}
+        <tr data-ph-id="{{ ph.pk }}" class="ph-row">
+          <td>
+            {{ ph.sprint.name }}
+            <span class="text-secondary" style="font-size:11.5px">
+              — {{ ph.sprint.start_date|date:"d M" }} to {{ ph.sprint.end_date|date:"d M Y" }}
+            </span>
+          </td>
+          <td class="text-center">
+            <div class="d-flex justify-content-center gap-1 align-items-center">
+              <button class="btn btn-ghost-icon" style="width:22px;height:22px;font-size:10px"
+                      onclick="setDays('{{ plan.pk }}', {{ ph.pk }}, 0.5)"
+                      title="Set to 0.5 day">
+                ½
+              </button>
+              <span class="fw-500 ph-days" id="ph-days-{{ ph.pk }}"
+                    style="min-width:24px;text-align:center">
+                {{ ph.days }}
+              </span>
+              <button class="btn btn-ghost-icon" style="width:22px;height:22px;font-size:10px"
+                      onclick="setDays('{{ plan.pk }}', {{ ph.pk }}, 1.0)"
+                      title="Set to 1 day">
+                1
+              </button>
+            </div>
+          </td>
+          <td class="text-center">
+            {% if ph.is_auto_generated %}
+            <span class="rp-badge rp-badge--muted" style="font-size:10px">Auto</span>
+            {% else %}
+            <span class="rp-badge" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:10px">
+              Manual
+            </span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            <button class="btn btn-ghost-icon btn-ghost-icon--danger"
+                    style="width:24px;height:24px;font-size:11px"
+                    onclick="deletePlaceholder('{{ plan.pk }}', {{ ph.pk }})"
+                    title="Delete this placeholder">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="rp-card text-center py-5 text-secondary">
+  <i class="bi bi-calendar2-plus display-6 d-block mb-2 opacity-25"></i>
+  No projected leave placeholders yet.
+  <br>
+  <button class="btn btn-primary btn-sm mt-3" onclick="openAddModal()">
+    <i class="bi bi-plus me-1"></i>Add manually
+  </button>
+  <span class="mx-2 text-secondary">or</span>
+  <form method="post" action="{% url 'resource_plan:generate_placeholders' plan.pk %}"
+        class="d-inline">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-secondary btn-sm mt-3">
+      <i class="bi bi-lightning-charge me-1"></i>Auto-generate
+    </button>
+  </form>
+</div>
+{% endif %}
+
+<!-- ── Add placeholder modal ── -->
+<div class="modal fade" id="addPlaceholderModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Add projected leave</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="add-ph-error" class="alert alert-danger py-2 mb-3 d-none"
+             style="font-size:12.5px"></div>
+
+        <div class="rp-field mb-3">
+          <label class="rp-label">Team member <span class="rp-required">*</span></label>
+          <select id="add-ph-member" class="form-select rp-select">
+            <option value="">— Select member —</option>
+            {% for grp in grouped %}
+            <option value="{{ grp.member.pk }}">{{ grp.member.display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="rp-field mb-3">
+          <label class="rp-label">Sprint <span class="rp-required">*</span></label>
+          <select id="add-ph-sprint" class="form-select rp-select">
+            <option value="">— Select sprint —</option>
+            {% for s in sprints %}
+            <option value="{{ s.pk }}">{{ s.name }} ({{ s.start_date|date:"d M" }} – {{ s.end_date|date:"d M Y" }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="rp-field mb-4">
+          <label class="rp-label">Days <span class="rp-required">*</span></label>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm ph-days-btn active"
+                    data-val="1.0" onclick="selectDaysBtn(this)">1 day</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm ph-days-btn"
+                    data-val="0.5" onclick="selectDaysBtn(this)">0.5 day</button>
+          </div>
+          <input type="hidden" id="add-ph-days" value="1.0" />
+        </div>
+
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary"
+                onclick="savePlaceholder()">
+          <i class="bi bi-plus me-1"></i>Add
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const _planPk = {{ plan.pk }};
+const _csrf   = '{{ csrf_token }}';
+
+/* ── Set days on existing placeholder ─────────────── */
+async function setDays(planPk, phPk, days) {
+  const res  = await fetch(`/resource-plan/${planPk}/placeholders/${phPk}/update/`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf },
+    body:    JSON.stringify({ days }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    const el = document.getElementById(`ph-days-${phPk}`);
+    if (el) el.textContent = data.days;
+  } else {
+    alert(data.detail || 'Update failed.');
+  }
+}
+
+/* ── Delete placeholder ────────────────────────────── */
+async function deletePlaceholder(planPk, phPk) {
+  if (!confirm('Delete this projected leave placeholder?')) return;
+  const res  = await fetch(`/resource-plan/${planPk}/placeholders/${phPk}/delete/`, {
+    method: 'POST', headers: { 'X-CSRFToken': _csrf }
+  });
+  const data = await res.json();
+  if (data.ok) {
+    document.querySelector(`tr[data-ph-id="${phPk}"]`)?.remove();
+  } else {
+    alert(data.detail || 'Delete failed.');
+  }
+}
+
+/* ── Add modal ─────────────────────────────────────── */
+function openAddModal() {
+  bootstrap.Modal.getOrCreateInstance(
+    document.getElementById('addPlaceholderModal')
+  ).show();
+}
+
+function selectDaysBtn(btn) {
+  document.querySelectorAll('.ph-days-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('add-ph-days').value = btn.dataset.val;
+}
+
+async function savePlaceholder() {
+  const memberId = document.getElementById('add-ph-member').value;
+  const sprintId = document.getElementById('add-ph-sprint').value;
+  const days     = parseFloat(document.getElementById('add-ph-days').value);
+  const errEl    = document.getElementById('add-ph-error');
+
+  if (!memberId || !sprintId) {
+    errEl.textContent = 'Please select a member and sprint.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+
+  const res  = await fetch(`/resource-plan/${_planPk}/placeholders/new/`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf },
+    body:    JSON.stringify({ team_member_id: memberId, sprint_id: sprintId, days }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('addPlaceholderModal'))?.hide();
+    location.reload();
+  } else {
+    errEl.textContent = data.detail || 'Save failed.';
+    errEl.classList.remove('d-none');
+  }
+}
+</script>
+{% endblock %}

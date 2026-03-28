@@ -1,5 +1,4 @@
 import datetime
-from decimal import Decimal
 from django.views.generic import ListView, View
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404
@@ -81,17 +80,12 @@ class ResourcePlanCreateView(View):
                 'form': form, 'is_create': True
             })
         try:
-            cd = form.cleaned_data
-            # status is hidden on the create form — coerce '' or None to DRAFT
-            status = cd.get('status') or ResourcePlan.Status.DRAFT
-            # threshold may be None/empty if the field was cleared — default to 10
-            threshold = cd.get('allocation_threshold_pct') or Decimal('10.00')
-
+            cd   = form.cleaned_data
             plan = ResourcePlanService.create_plan({
                 'name':                     cd['name'],
                 'financial_year_id':        cd['financial_year'].pk,
-                'status':                   status,
-                'allocation_threshold_pct': threshold,
+                'status':                   cd.get('status', ResourcePlan.Status.DRAFT),
+                'allocation_threshold_pct': cd.get('allocation_threshold_pct', 10),
                 'scope_notes':              cd.get('scope_notes', ''),
             })
             messages.success(request, f'Resource plan "{plan.name}" created.')
@@ -160,17 +154,20 @@ class ResourcePlanConfigureView(View):
             .prefetch_related(
                 'project_teams__team',
                 'project_teams__phases__assignments__team_member',
+                'sprint_budgets__sprint',   # ← Round B: per-sprint budget rows
             )
             .order_by('project__programme_name', 'project__project_name')
         )
         unmapped = ResourcePlanService.get_unmapped_projects(plan.pk)
+        from .forms import ResourcePlanSprintBudgetForm
         return {
-            'plan':          plan,
-            'plan_projects': plan_projects,
-            'unmapped':      unmapped,
-            'add_project_form': ResourcePlanProjectForm(),
-            'add_team_form':    ResourcePlanProjectTeamForm(),
-            'add_phase_form':   ResourcePlanPhaseForm(plan=plan),
+            'plan':               plan,
+            'plan_projects':      plan_projects,
+            'unmapped':           unmapped,
+            'add_project_form':   ResourcePlanProjectForm(),
+            'add_team_form':      ResourcePlanProjectTeamForm(),
+            'add_phase_form':     ResourcePlanPhaseForm(plan=plan),
+            'sprint_budget_form': ResourcePlanSprintBudgetForm(plan=plan),
         }
 
     def get(self, request, pk):
@@ -190,6 +187,10 @@ class ResourcePlanConfigureView(View):
             return self._add_team(request, plan)
         if action == 'add_phase':
             return self._add_phase(request, plan)
+        if action == 'add_sprint_budget':
+            return self._add_sprint_budget(request, plan)
+        if action == 'delete_sprint_budget':
+            return self._delete_sprint_budget(request, plan)
 
         messages.error(request, 'Unknown action.')
         return HttpResponseRedirect(reverse('resource_plan:configure', args=[pk]))
@@ -279,6 +280,51 @@ class ResourcePlanConfigureView(View):
             messages.success(request, f'Phase "{cd["name"]}" added.')
         except ValidationError as exc:
             messages.error(request, str(exc))
+        return HttpResponseRedirect(reverse('resource_plan:configure', args=[plan.pk]))
+
+
+    def _add_sprint_budget(self, request, plan):
+        """Add or update a per-sprint budget release for a plan-project."""
+        from .models import ResourcePlanSprintBudget
+        from .forms import ResourcePlanSprintBudgetForm
+        pp_pk = request.POST.get('plan_project_pk', '').strip()
+        if not pp_pk:
+            messages.error(request, 'Project is required for sprint budget.')
+            return HttpResponseRedirect(reverse('resource_plan:configure', args=[plan.pk]))
+        form = ResourcePlanSprintBudgetForm(request.POST, plan=plan)
+        if not form.is_valid():
+            messages.error(request, f'Sprint budget error: {form.errors}')
+            return HttpResponseRedirect(reverse('resource_plan:configure', args=[plan.pk]))
+        try:
+            cd = form.cleaned_data
+            obj, created = ResourcePlanSprintBudget.objects.update_or_create(
+                plan_project_id=int(pp_pk),
+                sprint=cd['sprint'],
+                defaults={
+                    'budget_amount': cd['budget_amount'],
+                    'notes':         cd.get('notes', ''),
+                },
+            )
+            messages.success(
+                request,
+                f'Sprint budget {"created" if created else "updated"} for {cd["sprint"].name}.'
+            )
+        except Exception as exc:
+            messages.error(request, str(exc))
+        return HttpResponseRedirect(reverse('resource_plan:configure', args=[plan.pk]))
+
+    def _delete_sprint_budget(self, request, plan):
+        from .models import ResourcePlanSprintBudget
+        sb_pk = request.POST.get('sprint_budget_pk', '').strip()
+        if sb_pk:
+            try:
+                ResourcePlanSprintBudget.objects.filter(
+                    pk=int(sb_pk),
+                    plan_project__plan=plan,
+                ).delete()
+                messages.success(request, 'Sprint budget removed.')
+            except Exception as exc:
+                messages.error(request, str(exc))
         return HttpResponseRedirect(reverse('resource_plan:configure', args=[plan.pk]))
 
 
@@ -387,3 +433,434 @@ class ResourcePlanGeneratePlaceholdersView(View):
         except Exception as exc:
             messages.error(request, str(exc))
         return HttpResponseRedirect(reverse('resource_plan:detail', args=[pk]))
+
+
+# ═══════════════════════════════════════════════════════════
+#  Round A — Project configuration screen (2.11 / 2.12)
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanProjectsView(View):
+    """
+    /resource-plan/<pk>/projects/
+    Separate table screen listing all scoped projects with their teams,
+    phases, and assignment counts. View / edit / delete per row.
+    """
+    template_name = 'resource_plan/plan_projects.html'
+
+    def get(self, request, pk):
+        plan = ResourcePlanService.get_plan(pk)
+        plan_projects = (
+            ResourcePlanProject.objects
+            .filter(plan=plan)
+            .select_related('project')
+            .prefetch_related(
+                'project_teams__team',
+                'project_teams__phases__assignments__team_member',
+            )
+            .order_by('project__programme_name', 'project__project_name')
+        )
+        return render(request, self.template_name, {
+            'plan':          plan,
+            'plan_projects': plan_projects,
+        })
+
+
+class ResourcePlanProjectEditView(View):
+    """
+    /resource-plan/<plan_pk>/projects/<pp_pk>/edit/
+    Edit one plan-project (basis, priority override, confidence override,
+    dates_strict, notes).
+    """
+    template_name = 'resource_plan/plan_project_edit.html'
+
+    def _get(self, plan, pp):
+        from .forms import ResourcePlanProjectForm
+        form = ResourcePlanProjectForm(instance=pp)
+        return render(self.request, self.template_name, {
+            'plan': plan, 'pp': pp, 'form': form
+        })
+
+    def get(self, request, plan_pk, pp_pk):
+        self.request = request
+        plan = ResourcePlanService.get_plan(plan_pk)
+        pp   = ResourcePlanProject.objects.select_related('project').get(pk=pp_pk, plan=plan)
+        return self._get(plan, pp)
+
+    def post(self, request, plan_pk, pp_pk):
+        plan = ResourcePlanService.get_plan(plan_pk)
+        pp   = ResourcePlanProject.objects.select_related('project').get(pk=pp_pk, plan=plan)
+        from .forms import ResourcePlanProjectForm
+        form = ResourcePlanProjectForm(request.POST, instance=pp)
+        if not form.is_valid():
+            return render(request, self.template_name, {
+                'plan': plan, 'pp': pp, 'form': form
+            })
+        try:
+            cd = form.cleaned_data
+            PlanProjectService.update(pp.pk, {
+                'basis':               cd['basis'],
+                'custom_amount':       cd.get('custom_amount'),
+                'priority_override':   cd.get('priority_override', ''),
+                'confidence_override': cd.get('confidence_override', ''),
+                'dates_strict':        cd.get('dates_strict', False),
+                'notes':               cd.get('notes', ''),
+            })
+            messages.success(request, f'"{pp.project.display_name}" updated.')
+            return HttpResponseRedirect(
+                reverse('resource_plan:projects', args=[plan_pk])
+            )
+        except ValidationError as exc:
+            _apply_errors(form, exc)
+            return render(request, self.template_name, {
+                'plan': plan, 'pp': pp, 'form': form
+            })
+
+
+class ResourcePlanProjectDeleteView(View):
+    """POST /resource-plan/<plan_pk>/projects/<pp_pk>/delete/ → JSON"""
+
+    def post(self, request, plan_pk, pp_pk):
+        try:
+            PlanProjectService.delete(pp_pk)
+            return JsonResponse({'ok': True})
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Round A — Phase CRUD (real modal backing views)
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanPhaseEditView(View):
+    """
+    GET/POST /resource-plan/<plan_pk>/phases/<phase_pk>/edit/
+    Returns JSON fragment for modal rendering.
+    """
+
+    def get(self, request, plan_pk, phase_pk):
+        plan  = ResourcePlanService.get_plan(plan_pk)
+        phase = ResourcePlanPhase.objects.select_related(
+            'plan_project_team__plan_project__project',
+            'plan_project_team__team',
+        ).get(pk=phase_pk)
+        from .forms import ResourcePlanPhaseForm
+        form = ResourcePlanPhaseForm(instance=phase, plan=plan)
+        return render(request, 'resource_plan/phase_form_modal.html', {
+            'plan': plan, 'phase': phase, 'form': form,
+            'is_create': False,
+        })
+
+    def post(self, request, plan_pk, phase_pk):
+        plan  = ResourcePlanService.get_plan(plan_pk)
+        phase = ResourcePlanPhase.objects.get(pk=phase_pk)
+        from .forms import ResourcePlanPhaseForm
+        form = ResourcePlanPhaseForm(request.POST, instance=phase, plan=plan)
+        if not form.is_valid():
+            return JsonResponse({'ok': False, 'errors': form.errors}, status=400)
+        try:
+            cd = form.cleaned_data
+            PlanPhaseService.update(phase_pk, {
+                'name':                 cd['name'],
+                'sequence_order':       cd['sequence_order'],
+                'start_sprint_id':      cd['start_sprint'].pk if cd.get('start_sprint') else None,
+                'end_sprint_id':        cd['end_sprint'].pk   if cd.get('end_sprint')   else None,
+                'predecessor_phase_id': cd['predecessor_phase'].pk if cd.get('predecessor_phase') else None,
+                'dependency_type':      cd.get('dependency_type', ''),
+                'ramp_pattern':         cd['ramp_pattern'],
+                'max_days_per_sprint':  cd.get('max_days_per_sprint'),
+                'notes':                cd.get('notes', ''),
+            })
+            return JsonResponse({'ok': True})
+        except ValidationError as exc:
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return JsonResponse({'ok': False, 'detail': msg}, status=400)
+
+
+class ResourcePlanPhaseDeleteView(View):
+    def post(self, request, plan_pk, phase_pk):
+        try:
+            PlanPhaseService.delete(phase_pk)
+            return JsonResponse({'ok': True})
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Round A — Assignment CRUD (2.3 / 2.4 / 2.17)
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanAssignmentListView(View):
+    """
+    GET /resource-plan/<plan_pk>/phases/<phase_pk>/assignments/
+    Returns a JSON list of assignments for a phase — used to refresh
+    the assignment table in the configure modal without page reload.
+    """
+
+    def get(self, request, plan_pk, phase_pk):
+        assignments = (
+            ResourcePlanAssignment.objects
+            .filter(phase_id=phase_pk)
+            .select_related('team_member', 'phase__plan_project_team__team')
+            .order_by('team_member__last_name', 'placeholder_name')
+        )
+        data = [
+            {
+                'id':              a.pk,
+                'display_name':    a.display_name,
+                'assignment_type': a.assignment_type,
+                'is_interim':      a.is_interim,
+                'pause_from':      a.pause_from_sprint.name if a.pause_from_sprint else None,
+                'resume_at':       a.resume_at_sprint.name  if a.resume_at_sprint  else None,
+                'notes':           a.notes,
+            }
+            for a in assignments
+        ]
+        return JsonResponse({'ok': True, 'assignments': data})
+
+
+class ResourcePlanAssignmentCreateView(View):
+    """
+    GET  /resource-plan/<plan_pk>/phases/<phase_pk>/assignments/new/
+         Returns the assignment form as an HTML fragment (for modal).
+    POST /resource-plan/<plan_pk>/phases/<phase_pk>/assignments/new/
+         Creates the assignment. Returns JSON {ok, id, display_name}.
+    """
+
+    def _get_team(self, phase_pk):
+        try:
+            return ResourcePlanPhase.objects.select_related(
+                'plan_project_team__team'
+            ).get(pk=phase_pk).plan_project_team.team
+        except Exception:
+            return None
+
+    def get(self, request, plan_pk, phase_pk):
+        plan = ResourcePlanService.get_plan(plan_pk)
+        team = self._get_team(phase_pk)
+        from .forms import ResourcePlanAssignmentForm
+        form = ResourcePlanAssignmentForm(team=team, plan=plan)
+        return render(request, 'resource_plan/assignment_form_modal.html', {
+            'plan':      plan,
+            'phase_pk':  phase_pk,
+            'form':      form,
+            'is_create': True,
+            'team':      team,
+        })
+
+    def post(self, request, plan_pk, phase_pk):
+        plan = ResourcePlanService.get_plan(plan_pk)
+        team = self._get_team(phase_pk)
+        from .forms import ResourcePlanAssignmentForm
+        form = ResourcePlanAssignmentForm(request.POST, team=team, plan=plan)
+        if not form.is_valid():
+            return JsonResponse({'ok': False, 'errors': form.errors}, status=400)
+        try:
+            cd = form.cleaned_data
+            a  = PlanAssignmentService.create(int(phase_pk), {
+                'team_member_id':       cd['team_member'].pk if cd.get('team_member') else None,
+                'placeholder_name':     cd.get('placeholder_name', ''),
+                'assignment_type':      cd['assignment_type'],
+                'is_interim':           cd.get('is_interim', False),
+                'replaces_assignment_id': cd['replaces_assignment'].pk
+                                          if cd.get('replaces_assignment') else None,
+                'pause_from_sprint_id': cd['pause_from_sprint'].pk
+                                        if cd.get('pause_from_sprint') else None,
+                'resume_at_sprint_id':  cd['resume_at_sprint'].pk
+                                        if cd.get('resume_at_sprint') else None,
+                'notes':                cd.get('notes', ''),
+            })
+            return JsonResponse({
+                'ok':           True,
+                'id':           a.pk,
+                'display_name': a.display_name,
+                'type':         a.assignment_type,
+            })
+        except ValidationError as exc:
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return JsonResponse({'ok': False, 'detail': msg}, status=400)
+
+
+class ResourcePlanAssignmentEditView(View):
+    """
+    GET  /resource-plan/<plan_pk>/assignments/<assignment_pk>/edit/
+    POST /resource-plan/<plan_pk>/assignments/<assignment_pk>/edit/
+    """
+
+    def _get_objects(self, plan_pk, assignment_pk):
+        plan = ResourcePlanService.get_plan(plan_pk)
+        a    = ResourcePlanAssignment.objects.select_related(
+            'team_member',
+            'phase__plan_project_team__team',
+        ).get(pk=assignment_pk)
+        return plan, a
+
+    def get(self, request, plan_pk, assignment_pk):
+        plan, a = self._get_objects(plan_pk, assignment_pk)
+        from .forms import ResourcePlanAssignmentForm
+        team = a.phase.plan_project_team.team
+        form = ResourcePlanAssignmentForm(instance=a, team=team, plan=plan)
+        return render(request, 'resource_plan/assignment_form_modal.html', {
+            'plan':           plan,
+            'phase_pk':       a.phase_id,
+            'form':           form,
+            'is_create':      False,
+            'assignment':     a,
+            'team':           team,
+        })
+
+    def post(self, request, plan_pk, assignment_pk):
+        plan, a = self._get_objects(plan_pk, assignment_pk)
+        team    = a.phase.plan_project_team.team
+        from .forms import ResourcePlanAssignmentForm
+        form = ResourcePlanAssignmentForm(request.POST, instance=a, team=team, plan=plan)
+        if not form.is_valid():
+            return JsonResponse({'ok': False, 'errors': form.errors}, status=400)
+        try:
+            cd      = form.cleaned_data
+            updated = PlanAssignmentService.update(assignment_pk, {
+                'team_member_id':       cd['team_member'].pk if cd.get('team_member') else None,
+                'placeholder_name':     cd.get('placeholder_name', ''),
+                'assignment_type':      cd['assignment_type'],
+                'is_interim':           cd.get('is_interim', False),
+                'replaces_assignment_id': cd['replaces_assignment'].pk
+                                          if cd.get('replaces_assignment') else None,
+                'pause_from_sprint_id': cd['pause_from_sprint'].pk
+                                        if cd.get('pause_from_sprint') else None,
+                'resume_at_sprint_id':  cd['resume_at_sprint'].pk
+                                        if cd.get('resume_at_sprint') else None,
+                'notes':                cd.get('notes', ''),
+            })
+            return JsonResponse({'ok': True, 'display_name': updated.display_name})
+        except ValidationError as exc:
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return JsonResponse({'ok': False, 'detail': msg}, status=400)
+
+
+class ResourcePlanAssignmentDeleteView(View):
+    def post(self, request, plan_pk, assignment_pk):
+        try:
+            PlanAssignmentService.delete(assignment_pk)
+            return JsonResponse({'ok': True})
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Round A — Placeholder leave view / edit (2.22)
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanPlaceholdersView(View):
+    """
+    GET  /resource-plan/<pk>/placeholders/
+    Shows all ResourcePlanLeafPlaceholder rows for this plan,
+    grouped by team member, with edit and delete per row.
+    Also allows manual addition of placeholder rows.
+    """
+    template_name = 'resource_plan/plan_placeholders.html'
+
+    def get(self, request, pk):
+        plan = ResourcePlanService.get_plan(pk)
+        from .models import ResourcePlanLeafPlaceholder
+        from apps.sprints.models import Sprint
+
+        placeholders = (
+            ResourcePlanLeafPlaceholder.objects
+            .filter(plan=plan)
+            .select_related('team_member', 'sprint')
+            .order_by('team_member__last_name', 'team_member__first_name', 'sprint__start_date')
+        )
+
+        # Group by member for accordion display
+        from collections import OrderedDict
+        grouped = OrderedDict()
+        for ph in placeholders:
+            key = ph.team_member_id
+            if key not in grouped:
+                grouped[key] = {'member': ph.team_member, 'rows': [], 'total_days': 0}
+            grouped[key]['rows'].append(ph)
+            grouped[key]['total_days'] += float(ph.days)
+
+        sprints = Sprint.objects.filter(
+            financial_year=plan.financial_year
+        ).order_by('start_date')
+
+        return render(request, self.template_name, {
+            'plan':     plan,
+            'grouped':  list(grouped.values()),
+            'sprints':  sprints,
+            'total_ph': placeholders.count(),
+        })
+
+
+class ResourcePlanPlaceholderUpdateView(View):
+    """
+    POST /resource-plan/<plan_pk>/placeholders/<ph_pk>/update/
+    Body: { "days": 0.5 | 1.0 }   Returns JSON.
+    """
+
+    def post(self, request, plan_pk, ph_pk):
+        import json
+        from .models import ResourcePlanLeafPlaceholder
+        try:
+            body = json.loads(request.body)
+            days = body.get('days')
+            if days not in (0.5, 1.0):
+                return JsonResponse(
+                    {'ok': False, 'detail': 'Days must be 0.5 or 1.0.'},
+                    status=400,
+                )
+            from decimal import Decimal
+            ph      = ResourcePlanLeafPlaceholder.objects.get(pk=ph_pk, plan_id=plan_pk)
+            ph.days = Decimal(str(days))
+            ph.is_auto_generated = False  # now manually set
+            ph.save()
+            return JsonResponse({'ok': True, 'days': str(ph.days)})
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+class ResourcePlanPlaceholderDeleteView(View):
+    """POST /resource-plan/<plan_pk>/placeholders/<ph_pk>/delete/"""
+
+    def post(self, request, plan_pk, ph_pk):
+        from .models import ResourcePlanLeafPlaceholder
+        try:
+            ResourcePlanLeafPlaceholder.objects.get(pk=ph_pk, plan_id=plan_pk).delete()
+            return JsonResponse({'ok': True})
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+class ResourcePlanPlaceholderCreateView(View):
+    """
+    POST /resource-plan/<plan_pk>/placeholders/new/
+    Body: { "team_member_id": N, "sprint_id": N, "days": 0.5|1.0 }
+    """
+
+    def post(self, request, plan_pk):
+        import json
+        from .models import ResourcePlanLeafPlaceholder
+        from decimal import Decimal
+        try:
+            body      = json.loads(request.body)
+            member_id = body.get('team_member_id')
+            sprint_id = body.get('sprint_id')
+            days      = body.get('days', 1.0)
+            if days not in (0.5, 1.0):
+                return JsonResponse({'ok': False, 'detail': 'Days must be 0.5 or 1.0.'}, status=400)
+            ph, created = ResourcePlanLeafPlaceholder.objects.get_or_create(
+                plan_id=plan_pk,
+                team_member_id=member_id,
+                sprint_id=sprint_id,
+                defaults={
+                    'days': Decimal(str(days)),
+                    'is_auto_generated': False,
+                },
+            )
+            if not created:
+                ph.days = Decimal(str(days))
+                ph.is_auto_generated = False
+                ph.save()
+            return JsonResponse({'ok': True, 'id': ph.pk, 'days': str(ph.days), 'created': created})
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)

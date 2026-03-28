@@ -1,0 +1,141 @@
+{# assignment_form_modal.html — rendered as a fragment inside #assignmentModalBody #}
+{% load static %}
+
+<form id="assignment-form" novalidate>
+  {% csrf_token %}
+
+  <div id="assignment-error" class="alert alert-danger py-2 mb-3 d-none" style="font-size:12.5px"></div>
+
+  <!-- Team member or TBC placeholder -->
+  <div class="rp-field mb-3">
+    <label class="rp-label">Engineer / team member</label>
+    <select name="{{ form.team_member.html_name }}"
+            class="form-select rp-select {% if form.team_member.errors %}is-invalid{% endif %}"
+            onchange="togglePlaceholder(this)">
+      <option value="">— Select engineer or leave blank for TBC —</option>
+      {% for m in form.fields.team_member.queryset %}
+      <option value="{{ m.pk }}"
+              {% if form.team_member.value|stringformat:"s" == m.pk|stringformat:"s" %}selected{% endif %}>
+        {{ m.display_name }} ({{ m.get_role_display }})
+      </option>
+      {% endfor %}
+    </select>
+    {% if form.team_member.errors %}
+    <div class="invalid-feedback d-block">{{ form.team_member.errors.0 }}</div>
+    {% endif %}
+    <p class="rp-hint mt-1">
+      Showing active members of <strong>{{ team.name }}</strong>.
+      Leave blank and fill in the placeholder name to create a TBC slot.
+    </p>
+  </div>
+
+  <!-- Placeholder name (shown when no member selected) -->
+  <div class="rp-field mb-3" id="placeholder-name-field"
+       style="{% if form.team_member.value %}display:none{% endif %}">
+    <label class="rp-label">Placeholder name</label>
+    <input type="text"
+           name="{{ form.placeholder_name.html_name }}"
+           value="{{ form.placeholder_name.value|default:'' }}"
+           class="form-control rp-input"
+           placeholder="e.g. ENGINEER X (TBC)" />
+    <p class="rp-hint mt-1">Used when the specific engineer is not yet confirmed.</p>
+  </div>
+
+  <!-- Assignment type -->
+  <div class="rp-field mb-3">
+    <label class="rp-label">Assignment type <span class="rp-required">*</span></label>
+    <select name="{{ form.assignment_type.html_name }}" class="form-select rp-select">
+      {% for val, label in form.fields.assignment_type.choices %}
+      <option value="{{ val }}"
+              {% if form.assignment_type.value == val %}selected{% endif %}>
+        {{ label }}
+      </option>
+      {% endfor %}
+    </select>
+    <p class="rp-hint mt-1">
+      Architects are excluded from auto-allocation by default.
+      Adhoc reserves capacity for BAU/support work.
+    </p>
+  </div>
+
+  <!-- Interim toggle -->
+  <div class="rp-field mb-3">
+    <div class="form-check form-switch">
+      <input type="checkbox" class="form-check-input"
+             name="{{ form.is_interim.html_name }}"
+             id="id_is_interim"
+             {% if form.is_interim.value %}checked{% endif %}
+             onchange="toggleInterim(this)" />
+      <label class="form-check-label rp-label" for="id_is_interim">
+        This is an interim replacement (covering another engineer's leave)
+      </label>
+    </div>
+  </div>
+
+  <!-- Pause/resume sprints (gap functionality) -->
+  <details class="mb-3">
+    <summary class="rp-label" style="cursor:pointer;list-style:none">
+      <i class="bi bi-pause-circle me-1 text-secondary"></i>
+      Pause / resume (optional gap in delivery)
+    </summary>
+    <div class="row g-2 mt-2">
+      <div class="col-6">
+        <label class="rp-label">Pause from sprint</label>
+        <select name="{{ form.pause_from_sprint.html_name }}"
+                class="form-select rp-select">
+          <option value="">— Not paused —</option>
+          {% for s in form.fields.pause_from_sprint.queryset %}
+          <option value="{{ s.pk }}"
+                  {% if form.pause_from_sprint.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>
+            {{ s.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6">
+        <label class="rp-label">Resume at sprint</label>
+        <select name="{{ form.resume_at_sprint.html_name }}"
+                class="form-select rp-select">
+          <option value="">— N/A —</option>
+          {% for s in form.fields.resume_at_sprint.queryset %}
+          <option value="{{ s.pk }}"
+                  {% if form.resume_at_sprint.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>
+            {{ s.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <p class="rp-hint mt-1">
+      Cells between pause and resume sprint will be set to 0 and locked.
+      This supports 3.14 gap scenarios per engineer.
+    </p>
+  </details>
+
+  <!-- Notes -->
+  <div class="rp-field mb-4">
+    <label class="rp-label">Notes</label>
+    <textarea name="{{ form.notes.html_name }}"
+              class="form-control rp-input" rows="2"
+              placeholder="Optional: specific activity, reason for interim, etc.">{{ form.notes.value|default:'' }}</textarea>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="button" id="save-assignment-btn" class="btn btn-sm btn-primary">
+      <i class="bi bi-check-lg me-1"></i>
+      {% if is_create %}Assign engineer{% else %}Save changes{% endif %}
+    </button>
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+            data-bs-dismiss="modal">Cancel</button>
+  </div>
+</form>
+
+<script>
+function togglePlaceholder(sel) {
+  const phField = document.getElementById('placeholder-name-field');
+  if (phField) phField.style.display = sel.value ? 'none' : '';
+}
+function toggleInterim(cb) {
+  // Future: show replaces_assignment select when checked
+}
+</script>
