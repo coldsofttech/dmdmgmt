@@ -693,6 +693,69 @@ class GridService:
 
         return {'rows': summary_rows, 'totals': totals}
 
+    @staticmethod
+    def section1_5_leaves(plan: ResourcePlan, team, sprints: list) -> dict:
+        """
+        Section 1.5 — Holidays + confirmed leaves + projected leaves per member per sprint.
+        Read-only. Shows exactly what is being deducted from capacity in Section 1.
+        """
+        from apps.team_members.models import TeamMember
+        from apps.leaves.models import Leave, calc_working_days
+
+        members = list(
+            TeamMember.objects.filter(team=team, is_active=True)
+            .order_by('last_name', 'first_name')
+        )
+        fy_id = plan.financial_year_id
+
+        confirmed_leaves = {}
+        for leave in Leave.objects.filter(
+            team_member__in=members,
+            financial_year_id=fy_id,
+        ).select_related('team_member'):
+            confirmed_leaves.setdefault(leave.team_member_id, []).append(leave)
+
+        placeholders = {}
+        for ph in ResourcePlanLeafPlaceholder.objects.filter(
+            plan=plan, team_member__in=members, sprint__in=sprints,
+        ):
+            placeholders[(ph.team_member_id, ph.sprint_id)] = ph.days
+
+        rows   = []
+        totals = {
+            s.pk: {'holiday_days': Decimal('0'), 'leave_days': Decimal('0'),
+                   'placeholder_days': Decimal('0'), 'total_deducted': Decimal('0')}
+            for s in sprints
+        }
+
+        for member in members:
+            member_leaves = confirmed_leaves.get(member.pk, [])
+            cells = {}
+            for sprint in sprints:
+                hol   = Decimal(str(sprint.holiday_count))
+                leave = Decimal('0')
+                for lv in member_leaves:
+                    if lv.start_date <= sprint.end_date and lv.end_date >= sprint.start_date:
+                        cs = max(lv.start_date, sprint.start_date)
+                        ce = min(lv.end_date,   sprint.end_date)
+                        leave += Decimal(str(
+                            calc_working_days(cs, ce, financial_year_id=fy_id)
+                        ))
+                ph    = placeholders.get((member.pk, sprint.pk), Decimal('0'))
+                total = hol + leave + ph
+                cells[sprint.pk] = {
+                    'holiday_days': hol, 'leave_days': leave,
+                    'placeholder_days': ph, 'total_deducted': total,
+                }
+                totals[sprint.pk]['holiday_days']     += hol
+                totals[sprint.pk]['leave_days']       += leave
+                totals[sprint.pk]['placeholder_days'] += ph
+                totals[sprint.pk]['total_deducted']   += total
+
+            rows.append({'member': member, 'cells': cells})
+
+        return {'rows': rows, 'totals': totals}
+
 
 # ═══════════════════════════════════════════════════════════
 #  Placeholder leave auto-generation (3.35)

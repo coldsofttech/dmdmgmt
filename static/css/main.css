@@ -1018,22 +1018,20 @@ a:hover { text-decoration: underline; }
   margin:      0 4px;
 }
  
-/* ── Plan tabs ───────────────────────────────────────────────
-   Bootstrap nav-tabs override to match the rp design system.
-   ──────────────────────────────────────────────────────────── */
+/* ── Plan tabs ────────────────────────────────────────────── */
 .rp-plan-tabs {
   border-bottom: 2px solid var(--color-border, #e2e8f0);
   gap: 2px;
 }
 .rp-plan-tabs .nav-link {
-  color:         var(--color-text-2, #64748b);
-  font-size:     13px;
-  font-weight:   500;
-  padding:       8px 16px;
-  border:        1px solid transparent;
+  color:       var(--color-text-2, #64748b);
+  font-size:   13px;
+  font-weight: 500;
+  padding:     8px 16px;
+  border:      1px solid transparent;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  transition:    background 0.12s, color 0.12s;
+  transition:  background 0.12s, color 0.12s;
 }
 .rp-plan-tabs .nav-link:hover {
   background: var(--color-surface-2, #f1f5f9);
@@ -1053,9 +1051,7 @@ a:hover { text-decoration: underline; }
   border-radius: 0 0 8px 8px;
 }
  
-/* ── Accordion sections ──────────────────────────────────────
-   Each team tab has three accordion panels (S1, S2, S3).
-   ──────────────────────────────────────────────────────────── */
+/* ── Accordion sections (2.14 — strong visual treatment) ───── */
 .rp-accordion-section {
   border-bottom: 1px solid var(--color-border, #e2e8f0);
 }
@@ -1067,204 +1063,265 @@ a:hover { text-decoration: underline; }
   display:         flex;
   align-items:     center;
   justify-content: space-between;
-  padding:         12px 20px;
+  padding:         10px 16px;
   background:      var(--color-surface-2, #f8fafc);
   border:          none;
+  border-left:     3px solid transparent;
   cursor:          pointer;
   font-size:       13px;
   text-align:      left;
-  transition:      background 0.12s;
+  transition:      background 0.12s, border-color 0.12s;
+  gap:             10px;
 }
 .rp-accordion-header:hover {
   background: var(--color-surface-3, #f1f5f9);
 }
+/* Section colour accents on left border when expanded */
+.rp-accordion-header[aria-expanded="true"] {
+  border-left-color: #6366f1;
+  background:        #fafafe;
+}
+/* Icon badges per section */
+.rp-accordion-icon {
+  display:       inline-flex;
+  align-items:   center;
+  justify-content: center;
+  width:         28px;
+  height:        28px;
+  border-radius: 6px;
+  font-size:     13px;
+  flex-shrink:   0;
+}
+.rp-accordion-icon--blue   { background: #eff6ff; color: #2563eb; }
+.rp-accordion-icon--orange { background: #fff7ed; color: #c2410c; }
+.rp-accordion-icon--indigo { background: #eef2ff; color: #4338ca; }
+.rp-accordion-icon--green  { background: #f0fdf4; color: #15803d; }
+ 
+.rp-accordion-subtitle {
+  color:      var(--color-text-2, #64748b);
+  font-size:  12px;
+  font-weight: 400;
+  margin-left: 6px;
+}
+/* Chevron: right by default, rotates to down on expand */
 .rp-accordion-chevron {
   font-size:   12px;
   color:       var(--color-text-2, #64748b);
+  flex-shrink: 0;
   transition:  transform 0.2s;
 }
 .rp-accordion-chevron--open {
-  transform: rotate(180deg);
+  transform: rotate(90deg);
 }
-.text-indigo { color: #6366f1; }
  
-/* ── Grid wrapper — horizontal scroll ───────────────────────
-   The grid can be very wide (26 sprints per year) — must scroll.
-   ──────────────────────────────────────────────────────────── */
+/* ── Grid wrapper ─────────────────────────────────────────── */
 .rp-grid-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
  
-/* ── Grid table ──────────────────────────────────────────────
-   Dense, compact cells matching the Excel-like spec.
-   ──────────────────────────────────────────────────────────── */
+/* ── Grid table (2.13 — Excel-like: borders on all sides) ──── */
 .rp-grid-table {
-  border-collapse: separate;
-  border-spacing:  0;
-  width:           max-content;
-  min-width:       100%;
-  font-size:       12px;
-  font-family:     var(--font-mono, 'DM Mono', monospace);
+  border-collapse: collapse;   /* ← key change: collapse = shared borders */
+  width:        max-content;
+  min-width:    100%;
+  font-size:    12px;
+  font-family:  var(--font-mono, 'DM Mono', monospace);
 }
  
-/* Fixed first column (member/project name) */
+/* Fixed first column */
 .rp-grid-th-fixed,
 .rp-grid-td-fixed {
-  position:        sticky;
-  left:            0;
-  background:      #fff;
-  z-index:         2;
-  min-width:       200px;
-  max-width:       240px;
-  white-space:     nowrap;
-  overflow:        hidden;
-  text-overflow:   ellipsis;
-  padding:         6px 10px;
-  border-right:    2px solid var(--color-border, #e2e8f0);
-  font-family:     var(--font-sans, 'DM Sans', sans-serif);
-  font-size:       12.5px;
+  position:      sticky;
+  left:          0;
+  background:    #fff;
+  z-index:       2;
+  min-width:     200px;
+  max-width:     240px;
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+  padding:       5px 10px;
+  border:        1px solid #d1d5db;   /* solid border all sides */
+  font-family:   var(--font-sans, 'DM Sans', sans-serif);
+  font-size:     12.5px;
 }
 .rp-grid-th-fixed {
-  background:  var(--color-surface-2, #f8fafc);
+  background:  var(--color-surface-2, #f3f4f6);
   font-weight: 600;
   z-index:     3;
 }
  
 /* Sprint column headers */
 .rp-grid-th {
-  background:  var(--color-surface-2, #f8fafc);
-  font-weight: 500;
-  text-align:  center;
-  padding:     4px 6px;
-  min-width:   70px;
-  max-width:   80px;
-  border-bottom: 2px solid var(--color-border, #e2e8f0);
-  border-right:  1px solid var(--color-border, #e2e8f0);
-  white-space: nowrap;
+  background:   var(--color-surface-2, #f3f4f6);
+  font-weight:  500;
+  text-align:   center;
+  padding:      4px 6px;
+  min-width:    68px;
+  max-width:    80px;
+  border:       1px solid #d1d5db;   /* solid border all sides */
+  white-space:  nowrap;
 }
 .rp-grid-th-label { font-size: 11px; font-weight: 600; }
 .rp-grid-th-sub   { font-size: 10px; color: var(--color-text-2, #64748b); }
  
-/* Standard data cell */
+/* Standard data cell — solid border all sides (2.13) */
 .rp-grid-cell {
-  text-align:    center;
-  padding:       5px 4px;
-  border-right:  1px solid var(--color-border, #e2e8f0);
-  border-bottom: 1px solid var(--color-border, #e2e8f0);
-  min-width:     70px;
-  max-width:     80px;
-  font-size:     12px;
-  transition:    background 0.1s;
-  white-space:   nowrap;
+  text-align:  center;
+  padding:     4px 3px;
+  border:      1px solid #d1d5db;   /* key fix: bottom AND top border */
+  min-width:   68px;
+  max-width:   80px;
+  font-size:   12px;
+  transition:  background 0.1s;
+  white-space: nowrap;
+  background:  #fff;
 }
 .rp-grid-zero {
-  color:       var(--color-text-2, #94a3b8);
-  font-size:   11px;
+  color:     var(--color-text-2, #94a3b8);
+  font-size: 11px;
 }
  
 /* ── Section 1 capacity colours ──────────────────────────── */
-.rp-grid-cell--full    { background: #f0fdf4; color: #15803d; }   /* ≥8d  */
-.rp-grid-cell--medium  { background: #fefce8; color: #854d0e; }   /* 4–7d */
-.rp-grid-cell--low     { background: #fff7ed; color: #9a3412; }   /* 1–3d */
-.rp-grid-cell--zero    { background: #f8fafc; color: #94a3b8; }   /* 0d   */
+.rp-grid-cell--full    { background: #f0fdf4; color: #15803d; }
+.rp-grid-cell--medium  { background: #fefce8; color: #854d0e; }
+.rp-grid-cell--low     { background: #fff7ed; color: #9a3412; }
+.rp-grid-cell--zero    { background: #f9fafb; color: #94a3b8; }
 .rp-grid-cell--placeholder {
-  background:   repeating-linear-gradient(
+  background: repeating-linear-gradient(
     45deg, #f1f5f9, #f1f5f9 4px, #e2e8f0 4px, #e2e8f0 8px
   );
-  color:        #64748b;
+  color: #64748b;
 }
  
-/* ── Section 2 allocation cell states ───────────────────── */
+/* ── Section 1.5 — deductions (2.16) ─────────────────────── */
+.rp-grid-cell--s15 {
+  background: #fafafa;
+  padding:    2px 3px;
+}
+.rp-grid-cell--s15-has-data {
+  background: #fff7ed;
+}
+.rp-s15-total {
+  font-size:   12px;
+  font-weight: 600;
+  color:       #9a3412;
+}
+.rp-s15-detail {
+  display:    flex;
+  gap:        4px;
+  justify-content: center;
+  flex-wrap:  wrap;
+  font-size:  9.5px;
+  color:      #92400e;
+  margin-top: 1px;
+}
+.rp-s15-detail span {
+  display:     inline-flex;
+  align-items: center;
+  gap:         2px;
+}
+ 
+/* ── Section 2 allocation cell states ─────────────────────── */
 .rp-grid-cell--editable {
   cursor: pointer;
 }
 .rp-grid-cell--editable:hover {
-  background: #eff6ff !important;
-  outline:    2px solid #6366f1;
+  background:     #eff6ff !important;
+  outline:        2px solid #6366f1;
   outline-offset: -2px;
+  z-index:        1;
 }
-.rp-grid-cell--auto   { background: #fafafa; }
+.rp-grid-cell--auto   { background: #fafafa; color: #374151; }
 .rp-grid-cell--manual { background: #eff6ff; color: #1d4ed8; }
 .rp-grid-cell--locked {
   background: #f1f5f9;
   color:      #94a3b8;
   cursor:     not-allowed;
 }
-.rp-grid-cell--over   { background: #fef2f2; color: #991b1b; }
-.rp-grid-cell--ontrack{ background: #f0fdf4; color: #15803d; }
+.rp-grid-cell--over    { background: #fef2f2; color: #991b1b; }
+.rp-grid-cell--ontrack { background: #f0fdf4; color: #15803d; }
+.rp-grid-cell--s3-ok   { background: #f0fdf4; color: #166534; }
  
-/* Project header row in Section 2 */
+/* Project header row */
 .rp-grid-row--project-header td {
-  background:  var(--color-surface-2, #f8fafc);
-  border-top:  2px solid var(--color-border, #e2e8f0);
+  background: var(--color-surface-2, #f3f4f6);
+  border-top: 2px solid #c7d2fe !important;
 }
-.rp-grid-project-label { font-size: 12.5px; }
-.rp-grid-cell--project-header {
-  background: var(--color-surface-2, #f8fafc);
-}
-.rp-grid-td-engineer { padding-left: 6px !important; }
+.rp-grid-cell--project-header { background: var(--color-surface-2, #f3f4f6); }
+.rp-grid-project-label        { font-size: 12.5px; }
+.rp-grid-td-engineer          { padding-left: 6px !important; }
  
-/* Architect / adhoc / interim row faint tint */
+/* Architect / adhoc / interim row tints */
 .rp-grid-row--architect td { background: #fffbeb; }
 .rp-grid-row--adhoc     td { background: #f8fafc; }
 .rp-grid-row--interim   td { background: #eff6ff; }
  
-/* ── Section 3 summary cell ──────────────────────────────── */
+/* ── Section 3 — clean single remaining value (2.20) ──────── */
+/* No stacked alloc+remain — just one number per cell */
 .rp-grid-cell--summary {
-  padding: 3px 4px;
-  line-height: 1.2;
-}
-.rp-summary-alloc  { font-size: 12px; font-weight: 600; }
-.rp-summary-remain { font-size: 10.5px; }
- 
-/* ── Footer / totals row ─────────────────────────────────── */
-.rp-grid-tfoot td {
-  background:  var(--color-surface-2, #f8fafc);
-  border-top:  2px solid var(--color-border, #e2e8f0);
   font-size:   12px;
+  font-weight: 500;
 }
-.rp-grid-tfoot-summary { padding: 3px 4px; line-height: 1.2; }
  
-/* ── Inline cell editor pop-over ─────────────────────────── */
+/* ── Footer / totals row ──────────────────────────────────── */
+.rp-grid-tfoot td {
+  background:  var(--color-surface-2, #f3f4f6);
+  border-top:  2px solid #9ca3af !important;
+  font-size:   12px;
+  font-weight: 600;
+}
+.rp-grid-tfoot-total { text-align: center; }
+ 
+/* ── Inline cell editor pop-over ──────────────────────────── */
 .rp-cell-editor {
-  position:     absolute;
-  z-index:      1000;
-  background:   #fff;
-  border:       1px solid var(--color-border, #e2e8f0);
+  position:      absolute;
+  z-index:       1000;
+  background:    #fff;
+  border:        1px solid var(--color-border, #e2e8f0);
   border-radius: 8px;
-  padding:      12px;
-  box-shadow:   0 4px 20px rgba(0,0,0,.10);
-  min-width:    190px;
+  padding:       10px 12px;
+  box-shadow:    0 4px 20px rgba(0,0,0,.10);
+  min-width:     180px;
 }
  
-/* ── Legend items ────────────────────────────────────────── */
-.rp-grid-legend {
+/* ── Legend — coloured cell swatches (2.19) ───────────────── */
+/* Each legend item IS a miniature grid cell */
+.rp-legend-swatch {
   display:       inline-flex;
   align-items:   center;
-  padding:       2px 8px;
-  border-radius: 4px;
+  justify-content: center;
+  padding:       3px 8px;
+  border:        1px solid #d1d5db;
+  border-radius: 3px;
   font-size:     11px;
-  border:        1px solid var(--color-border, #e2e8f0);
+  font-family:   var(--font-mono, 'DM Mono', monospace);
+  white-space:   nowrap;
+  cursor:        default;
 }
-.rp-grid-legend.rp-grid-cell--full        { background:#f0fdf4; color:#15803d; }
-.rp-grid-legend.rp-grid-cell--medium      { background:#fefce8; color:#854d0e; }
-.rp-grid-legend.rp-grid-cell--low         { background:#fff7ed; color:#9a3412; }
-.rp-grid-legend.rp-grid-cell--over        { background:#fef2f2; color:#991b1b; }
-.rp-grid-legend.rp-grid-cell--auto        { background:#fafafa; color:#475569; }
-.rp-grid-legend.rp-grid-cell--manual      { background:#eff6ff; color:#1d4ed8; }
-.rp-grid-legend.rp-grid-cell--locked      { background:#f1f5f9; color:#94a3b8; }
-.rp-grid-legend.rp-grid-cell--placeholder {
+/* Inherit the same background/colour as the corresponding cell class */
+.rp-legend-swatch.rp-grid-cell--full        { background:#f0fdf4; color:#15803d; border-color:#86efac; }
+.rp-legend-swatch.rp-grid-cell--medium      { background:#fefce8; color:#854d0e; border-color:#fde68a; }
+.rp-legend-swatch.rp-grid-cell--low         { background:#fff7ed; color:#9a3412; border-color:#fed7aa; }
+.rp-legend-swatch.rp-grid-cell--zero        { background:#f9fafb; color:#94a3b8; border-color:#e5e7eb; }
+.rp-legend-swatch.rp-grid-cell--placeholder {
   background: repeating-linear-gradient(45deg,#f1f5f9,#f1f5f9 4px,#e2e8f0 4px,#e2e8f0 8px);
   color:#64748b;
 }
+.rp-legend-swatch.rp-grid-cell--auto   { background:#fafafa; color:#374151; border-color:#e5e7eb; }
+.rp-legend-swatch.rp-grid-cell--manual { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+.rp-legend-swatch.rp-grid-cell--locked { background:#f1f5f9; color:#94a3b8; border-color:#e5e7eb; }
+.rp-legend-swatch.rp-grid-cell--over   { background:#fef2f2; color:#991b1b; border-color:#fecaca; }
  
-/* ── Danger badge (used in conflict list) ────────────────── */
+/* ── Misc ─────────────────────────────────────────────────── */
 .rp-badge--danger {
   background:   #fef2f2;
   border:       1px solid #fecaca;
   color:        #991b1b;
 }
+.text-indigo { color: #6366f1; }
+ 
 
 /* ── Utilities ────────────────────────────────────────── */
 .fw-500 { font-weight: 500; }

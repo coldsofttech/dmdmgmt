@@ -350,14 +350,16 @@ class ResourcePlanDetailView(View):
         # Build grid data for each team
         team_grids = []
         for team in teams:
-            s1 = GridService.section1_capacity(plan, team, sprints)
-            s2 = GridService.section2_allocations(plan, team, sprints)
-            s3 = GridService.section3_summary(plan, team, sprints, s1, s2)
+            s1   = GridService.section1_capacity(plan, team, sprints)
+            s1_5 = GridService.section1_5_leaves(plan, team, sprints)
+            s2   = GridService.section2_allocations(plan, team, sprints)
+            s3   = GridService.section3_summary(plan, team, sprints, s1, s2)
             team_grids.append({
-                'team':    team,
-                'section1': s1,
-                'section2': s2,
-                'section3': s3,
+                'team':      team,
+                'section1':  s1,
+                'section1_5': s1_5,
+                'section2':  s2,
+                'section3':  s3,
             })
 
         # Pending conflicts
@@ -399,6 +401,13 @@ class ResourcePlanCellUpdateView(View):
     def post(self, request, plan_pk, assignment_pk, sprint_pk):
         import json
         try:
+            # 2.23 — block edits when plan is LOCKED
+            plan = ResourcePlanService.get_plan(plan_pk)
+            if plan.status == ResourcePlan.Status.LOCKED:
+                return JsonResponse(
+                    {'ok': False, 'detail': 'This resource plan is locked. Change plan status to Active or Draft to edit.'},
+                    status=403,
+                )
             body = json.loads(request.body)
             days = body.get('days', 0)
             cell = CellService.upsert_cell(
