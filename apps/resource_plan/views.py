@@ -43,9 +43,12 @@ class ResourcePlanListView(ListView):
 
     def get_queryset(self):
         fy_pk = self.request.GET.get('fy', '').strip()
-        return ResourcePlanService.list_plans(
-            financial_year_id=int(fy_pk) if fy_pk else None
+        q     = self.request.GET.get('q',  '').strip()
+        qs    = ResourcePlanService.list_plans(
+            financial_year_id=int(fy_pk) if fy_pk else None,
+            search=q or None,
         )
+        return qs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -53,10 +56,10 @@ class ResourcePlanListView(ListView):
         ctx['financial_years'] = FinancialYear.objects.all().order_by('-start_date')
         ctx['active_fy']       = ResourcePlanService.get_active_fy()
         ctx['selected_fy_pk']  = self.request.GET.get('fy', '')
+        ctx['search_q']        = self.request.GET.get('q', '')
 
-        # For each plan, attach its unmapped project count (3.27)
-        plans = ctx['plans']
-        for plan in plans:
+        # Attach unmapped project count to each plan
+        for plan in ctx['plans']:
             plan.unmapped_count = len(ResourcePlanService.get_unmapped_projects(plan.pk))
         return ctx
 

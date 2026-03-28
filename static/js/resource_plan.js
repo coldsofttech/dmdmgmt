@@ -390,3 +390,113 @@ function _showFlash(msg, type) {
   document.body.appendChild(div);
   setTimeout(() => div.remove(), 3500);
 }
+
+
+/* ═══════════════════════════════════════════════════════
+   COLUMN FILTER SYSTEM (2.21)
+   Tracks which sprint PKs are "visible". All four sections
+   (S1, S1.5, S2, S3) are filtered simultaneously.
+   Works in both sprint view and month view.
+   ═══════════════════════════════════════════════════════ */
+
+let _allSprintPks   = [];
+let _visibleSprints = null;  // null = all shown
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (window._sprintMeta) {
+    _allSprintPks = window._sprintMeta.map(s => String(s.pk));
+  }
+});
+
+function toggleColFilterPanel() {
+  const panel = document.getElementById('col-filter-panel');
+  const btn   = document.getElementById('btn-col-filter');
+  if (!panel) return;
+  const isOpen = !panel.classList.contains('d-none');
+  panel.classList.toggle('d-none', isOpen);
+  btn?.classList.toggle('active', !isOpen);
+}
+
+function toggleColChip(chip) {
+  chip.classList.toggle('active');
+  _applyColFilter();
+}
+
+function selectAllCols() {
+  document.querySelectorAll('.rp-col-filter-chip').forEach(c => c.classList.add('active'));
+  _applyColFilter();
+}
+
+function selectNoneCols() {
+  document.querySelectorAll('.rp-col-filter-chip').forEach(c => c.classList.remove('active'));
+  _applyColFilter();
+}
+
+function selectCurrentMonthCols() {
+  const curMonth = new Date().toLocaleString('en-GB', { month: 'long' });
+  document.querySelectorAll('.rp-col-filter-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.month === curMonth);
+  });
+  _applyColFilter();
+}
+
+function selectFutureCols() {
+  // Approximate future = sprints in the latter half by DOM order
+  const ths    = Array.from(document.querySelectorAll('th.sprint-col[data-sprint]'));
+  const unique = [...new Map(ths.map(t => [t.dataset.sprint, t])).values()];
+  const mid    = Math.floor(unique.length / 2);
+  const futurePks = new Set(unique.slice(mid).map(t => t.dataset.sprint));
+  document.querySelectorAll('.rp-col-filter-chip').forEach(c => {
+    c.classList.toggle('active', futurePks.has(c.dataset.sprintPk));
+  });
+  _applyColFilter();
+}
+
+function _applyColFilter() {
+  const activeChips = document.querySelectorAll('.rp-col-filter-chip.active');
+  const activePks   = new Set(Array.from(activeChips).map(c => c.dataset.sprintPk));
+  const allActive   = activePks.size >= _allSprintPks.length;
+  _visibleSprints   = allActive ? null : activePks;
+
+  // Update badge counter
+  const badge = document.getElementById('col-filter-badge');
+  if (badge) {
+    if (allActive) {
+      badge.classList.add('d-none');
+    } else {
+      const hidden = _allSprintPks.length - activePks.size;
+      badge.textContent = hidden + ' hidden';
+      badge.classList.remove('d-none');
+    }
+  }
+
+  // Apply visibility to all tables
+  document.querySelectorAll('.rp-grid-table').forEach(table => {
+    _applyFilterToTable(table, activePks, allActive);
+  });
+}
+
+function _applyFilterToTable(table, activePks, allActive) {
+  // TH sprint columns in thead
+  table.querySelectorAll('th.sprint-col[data-sprint]').forEach(th => {
+    th.style.display = (allActive || activePks.has(th.dataset.sprint)) ? '' : 'none';
+  });
+  // TD data cells in tbody + tfoot
+  table.querySelectorAll('td[data-sprint]').forEach(td => {
+    td.style.display = (allActive || activePks.has(td.dataset.sprint)) ? '' : 'none';
+  });
+}
+
+/* Patch setViewMode to re-apply filter after toggle */
+const _baseSetViewMode = setViewMode;
+setViewMode = function(mode) {
+  _baseSetViewMode(mode);
+  // After mode switch, re-apply column filter to newly shown/hidden columns
+  if (_visibleSprints !== null) {
+    const activeChips = document.querySelectorAll('.rp-col-filter-chip.active');
+    const activePks   = new Set(Array.from(activeChips).map(c => c.dataset.sprintPk));
+    document.querySelectorAll('.rp-grid-table').forEach(t => {
+      _applyFilterToTable(t, activePks, false);
+    });
+  }
+};

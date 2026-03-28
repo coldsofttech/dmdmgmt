@@ -9,20 +9,45 @@
     <h1 class="rp-page-title">Resource Plans</h1>
     <p class="rp-page-subtitle">Capacity and allocation planning per financial year</p>
   </div>
-  <div class="d-flex gap-2">
-    <a href="{% url 'resource_plan:create' %}" class="btn btn-primary btn-sm">
-      <i class="bi bi-plus-lg me-1"></i>New Resource Plan
-    </a>
-  </div>
+  <a href="{% url 'resource_plan:create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>New Resource Plan
+  </a>
 </div>
 {% endblock %}
 
 {% block content %}
 
-<!-- FY filter -->
-<div class="rp-toolbar d-flex gap-2 mb-4 align-items-center">
-  <form method="get" class="d-flex gap-2">
-    <select name="fy" class="form-select rp-select" style="max-width:220px"
+{# ── Toolbar: search + FY filter ── #}
+<div class="d-flex gap-2 mb-4 flex-wrap align-items-center">
+  <form method="get" class="d-flex gap-2 flex-wrap align-items-center flex-grow-1"
+        id="filter-form">
+
+    {# Preserve FY param when searching #}
+    {% if selected_fy_pk %}
+    <input type="hidden" name="fy" value="{{ selected_fy_pk }}">
+    {% endif %}
+
+    {# Search input #}
+    <div class="rp-search-wrap flex-grow-1" style="max-width:340px;position:relative">
+      <i class="bi bi-search rp-search-icon"></i>
+      <input type="text"
+             name="q"
+             id="plan-search-input"
+             value="{{ search_q }}"
+             class="form-control rp-input rp-search-input"
+             placeholder="Search by name, scope notes or financial year…"
+             autocomplete="off" />
+      {% if search_q %}
+      <a href="?{% if selected_fy_pk %}fy={{ selected_fy_pk }}{% endif %}"
+         class="rp-search-clear" title="Clear search">
+        <i class="bi bi-x-lg"></i>
+      </a>
+      {% endif %}
+    </div>
+
+    {# FY filter #}
+    <select name="fy"
+            class="form-select rp-select" style="max-width:210px"
             onchange="this.form.submit()">
       <option value="">All financial years</option>
       {% for fy in financial_years %}
@@ -32,21 +57,46 @@
       </option>
       {% endfor %}
     </select>
-    {% if selected_fy_pk %}
-    <a href="{% url 'resource_plan:list' %}" class="btn btn-outline-secondary btn-sm align-self-center">
-      <i class="bi bi-x"></i> Clear
+
+    <button type="submit" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-search me-1"></i>Search
+    </button>
+
+    {% if search_q or selected_fy_pk %}
+    <a href="{% url 'resource_plan:list' %}"
+       class="btn btn-ghost-icon align-self-center" title="Clear all filters">
+      <i class="bi bi-x-circle me-1"></i>Clear
     </a>
     {% endif %}
   </form>
 </div>
 
+{# Result summary #}
+{% if search_q or selected_fy_pk %}
+<p class="text-secondary mb-3" style="font-size:13px" id="result-count">
+  {% if plans %}
+  <strong>{{ plans|length }}</strong> plan{{ plans|length|pluralize }} found
+  {% if search_q %} matching "<em>{{ search_q }}</em>"{% endif %}
+  {% if selected_fy_pk and active_fy %}in {{ active_fy.short_fy }}{% endif %}
+  {% else %}
+  No plans found
+  {% if search_q %} matching "<em>{{ search_q }}</em>"{% endif %}
+  — <a href="{% url 'resource_plan:list' %}">clear filters</a>
+  {% endif %}
+</p>
+{% endif %}
+
 {% if plans %}
-<div class="row g-3">
+<div class="row g-3" id="plan-cards">
   {% for plan in plans %}
-  <div class="col-md-6 col-xl-4">
+  <div class="col-md-6 col-xl-4 plan-card-col"
+       data-name="{{ plan.name|lower }}"
+       data-fy="{{ plan.financial_year.short_fy|lower }}"
+       data-notes="{{ plan.scope_notes|lower }}"
+       data-status="{{ plan.status|lower }}">
     <div class="rp-card h-100 d-flex flex-column">
 
-      <!-- Header -->
+      {# Header #}
       <div class="d-flex justify-content-between align-items-start mb-2">
         <div>
           <h5 class="fw-600 mb-0" style="font-size:15px">
@@ -54,7 +104,9 @@
               {{ plan.name }}
             </a>
           </h5>
-          <span class="rp-code" style="font-size:12px">{{ plan.financial_year.short_fy }}</span>
+          <span class="rp-code" style="font-size:12px">
+            {{ plan.financial_year.short_fy }}
+          </span>
         </div>
         <span class="rp-badge
           {% if plan.status == 'ACTIVE' %}rp-badge--success
@@ -65,37 +117,44 @@
       </div>
 
       {% if plan.scope_notes %}
-      <p class="text-secondary mb-2" style="font-size:13px">{{ plan.scope_notes|truncatewords:15 }}</p>
+      <p class="text-secondary mb-2" style="font-size:13px">
+        {{ plan.scope_notes|truncatewords:15 }}
+      </p>
       {% endif %}
 
-      <!-- Stats row -->
+      {# Stats #}
       <div class="d-flex gap-3 flex-wrap mb-3">
         <div>
-          <span class="rp-stat-label">Projects scoped</span>
+          <span class="rp-stat-label">Projects</span>
           <span class="fw-500">{{ plan.plan_projects.count }}</span>
         </div>
         <div>
           <span class="rp-stat-label">Threshold</span>
           <span class="fw-500">±{{ plan.allocation_threshold_pct }}%</span>
         </div>
+        <div>
+          <span class="rp-stat-label">FY</span>
+          <span class="fw-500">{{ plan.financial_year.short_fy }}</span>
+        </div>
       </div>
 
-      <!-- Unmapped project warning (3.27) -->
+      {# Unmapped warning #}
       {% if plan.unmapped_count > 0 %}
       <div class="alert alert-warning py-2 px-3 mb-3 d-flex align-items-center gap-2"
            style="font-size:12.5px">
         <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
         <span>
           <strong>{{ plan.unmapped_count }}</strong>
-          active project{{ plan.unmapped_count|pluralize }} not yet mapped to this plan.
+          active project{{ plan.unmapped_count|pluralize }} not mapped.
         </span>
       </div>
       {% endif %}
 
+      {# Actions #}
       <div class="mt-auto d-flex gap-2">
         <a href="{% url 'resource_plan:detail' plan.pk %}"
            class="btn btn-sm btn-outline-primary">
-          <i class="bi bi-bar-chart-steps me-1"></i>View grid
+          <i class="bi bi-bar-chart-steps me-1"></i>Grid
         </a>
         <a href="{% url 'resource_plan:configure' plan.pk %}"
            class="btn btn-sm btn-outline-secondary">
@@ -113,16 +172,28 @@
   {% endfor %}
 </div>
 
+{# Client-side no-results message (hidden initially) #}
+<div id="no-results-msg" class="rp-card text-center py-5 text-secondary d-none">
+  <i class="bi bi-search display-6 d-block mb-2 opacity-25"></i>
+  No plans match your search.
+  <button class="btn btn-link btn-sm p-0 ms-1"
+          onclick="clearClientSearch()">Clear</button>
+</div>
+
 {% else %}
 <div class="rp-card text-center py-5 text-secondary">
   <i class="bi bi-bar-chart-steps display-6 d-block mb-2 opacity-25"></i>
-  No resource plans yet
-  {% if selected_fy_pk %}for this financial year{% endif %}.
+  {% if search_q or selected_fy_pk %}
+  No resource plans match your filters.
+  <a href="{% url 'resource_plan:list' %}">Clear filters</a>
+  {% else %}
+  No resource plans yet.
   <a href="{% url 'resource_plan:create' %}">Create the first one</a>.
+  {% endif %}
 </div>
 {% endif %}
 
-<!-- Delete modal -->
+{# Delete modal #}
 <div class="modal fade" id="deleteModal" tabindex="-1">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content rp-modal">
@@ -148,5 +219,64 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/resource_plan.js' %}"></script>
+<script>
+const _csrf = '{{ csrf_token }}';
+
+/* ── Client-side live search (filters already-rendered cards) ── */
+document.getElementById('plan-search-input')
+  ?.addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    _filterCards(q);
+  });
+
+function _filterCards(q) {
+  const cols    = document.querySelectorAll('.plan-card-col');
+  const noMsg   = document.getElementById('no-results-msg');
+  let   visible = 0;
+
+  cols.forEach(col => {
+    const match = !q
+      || col.dataset.name.includes(q)
+      || col.dataset.fy.includes(q)
+      || col.dataset.notes.includes(q)
+      || col.dataset.status.includes(q);
+    col.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+
+  if (noMsg) noMsg.classList.toggle('d-none', visible > 0);
+}
+
+function clearClientSearch() {
+  const input = document.getElementById('plan-search-input');
+  if (input) { input.value = ''; _filterCards(''); }
+}
+
+/* ── Delete plan ── */
+let _pendingDeletePk = null;
+function deletePlan(pk, name) {
+  _pendingDeletePk = pk;
+  document.getElementById('delete-plan-name').textContent = name;
+  const modal  = document.getElementById('deleteModal');
+  const btn    = document.getElementById('confirm-delete-btn');
+  const newBtn = btn.cloneNode(true);
+  btn.replaceWith(newBtn);
+  newBtn.addEventListener('click', async () => {
+    bootstrap.Modal.getInstance(modal)?.hide();
+    const res  = await fetch(`/resource-plan/${pk}/delete/`, {
+      method: 'POST', headers: { 'X-CSRFToken': _csrf }
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.querySelector(`.plan-card-col [onclick*="${pk}"]`)
+        ?.closest('.plan-card-col')?.remove();
+      const remaining = document.querySelectorAll('.plan-card-col:not([style*="none"])').length;
+      if (!remaining) location.reload();
+    } else {
+      alert(data.detail || 'Delete failed.');
+    }
+  });
+  bootstrap.Modal.getOrCreateInstance(modal).show();
+}
+</script>
 {% endblock %}

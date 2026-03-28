@@ -140,6 +140,52 @@ CONFIGURATION_DEFAULTS = {
             'is currently on Sprint 170).'
         ),
     },
+    'RESOURCE_PLAN_DEPENDENCY_SS': {
+        'label':       'Phase dependency: Start to Start (SS)',
+        'value':       'SS',
+        'description': (
+            'Start to Start — Both phases begin at the same sprint. '
+            'Use when two phases must kick off in parallel, e.g. '
+            'Development and QA environment setup both start in Sprint 5.'
+        ),
+    },
+    'RESOURCE_PLAN_DEPENDENCY_FS': {
+        'label':       'Phase dependency: Finish to Start (FS)',
+        'value':       'FS',
+        'description': (
+            'Finish to Start — This phase can only start after the predecessor '
+            'has finished. The most common dependency type. '
+            'Example: UAT can only start after Development is complete.'
+        ),
+    },
+    'RESOURCE_PLAN_DEPENDENCY_FF': {
+        'label':       'Phase dependency: Finish to Finish (FF)',
+        'value':       'FF',
+        'description': (
+            'Finish to Finish — Both phases end at the same sprint. '
+            'Use when a supporting phase must complete at the same time as '
+            'the phase it supports, e.g. Documentation finishes when Development finishes.'
+        ),
+    },
+    'RESOURCE_PLAN_ALLOCATION_THRESHOLD_PCT': {
+        'label':       'Default allocation threshold (%)',
+        'value':       '10',
+        'description': (
+            'Default acceptable over/under allocation tolerance (as a percentage '
+            'of days required) when creating a new resource plan. '
+            'Example: 10 means ±10% — if a project requires 100 days, '
+            'allocating between 90 and 110 days is acceptable.'
+        ),
+    },
+    'RESOURCE_PLAN_MAX_DAYS_PER_SPRINT': {
+        'label':       'Default max days per engineer per sprint',
+        'value':       '10',
+        'description': (
+            'Global cap on the number of days one engineer can be allocated '
+            'to any single project in a single sprint. '
+            'Can be overridden per phase. Default is 10 (full sprint).'
+        ),
+    },
     # ── Add future built-in configs below ─────────────────
     # 'SPRINT_LENGTH_DAYS': {
     #     'label':       'Default sprint length (days)',

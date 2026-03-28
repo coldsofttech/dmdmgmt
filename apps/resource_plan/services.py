@@ -74,10 +74,17 @@ def _get_sprint_cap() -> Decimal:
 class ResourcePlanService:
 
     @staticmethod
-    def list_plans(financial_year_id: int = None):
+    def list_plans(financial_year_id: int = None, search: str = None):
         qs = ResourcePlan.objects.select_related('financial_year').all()
         if financial_year_id:
             qs = qs.filter(financial_year_id=financial_year_id)
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(name__icontains=search) |
+                Q(scope_notes__icontains=search) |
+                Q(financial_year__long_fy__icontains=search)
+            )
         return qs
 
     @staticmethod
