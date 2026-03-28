@@ -1,0 +1,539 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ plan.name }} — Resource Plan — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-start justify-content-between flex-wrap gap-3">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'resource_plan:list' %}" class="btn btn-ghost-icon">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h1 class="rp-page-title d-flex align-items-center gap-2 flex-wrap">
+        {{ plan.name }}
+        <span class="rp-badge
+          {% if plan.status == 'ACTIVE' %}rp-badge--success
+          {% elif plan.status == 'LOCKED' %}rp-badge--warning
+          {% else %}rp-badge--muted{% endif %}">
+          {{ plan.get_status_display }}
+        </span>
+      </h1>
+      <p class="rp-page-subtitle">
+        <span class="rp-code">{{ plan.financial_year.long_fy }}</span>
+        <span class="text-secondary mx-2">·</span>
+        Threshold ±{{ plan.allocation_threshold_pct }}%
+        {% if plan.scope_notes %}
+        <span class="text-secondary mx-2">·</span> {{ plan.scope_notes|truncatewords:8 }}
+        {% endif %}
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <!-- Sprint / Month toggle -->
+    <div class="btn-group" role="group" id="view-toggle">
+      <button type="button" class="btn btn-sm btn-outline-secondary active" id="btn-sprint-view"
+              onclick="setViewMode('sprint')">
+        <i class="bi bi-calendar3-range me-1"></i>Sprint
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-month-view"
+              onclick="setViewMode('month')">
+        <i class="bi bi-calendar3 me-1"></i>Month
+      </button>
+    </div>
+    <a href="{% url 'resource_plan:configure' plan.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-gear me-1"></i>Configure
+    </a>
+    <form method="post" action="{% url 'resource_plan:generate_placeholders' plan.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-secondary btn-sm"
+              title="Auto-generate projected leave placeholders for under-allocated members">
+        <i class="bi bi-calendar2-plus me-1"></i>Generate placeholders
+      </button>
+    </form>
+    <a href="{% url 'resource_plan:edit' plan.pk %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-pencil me-1"></i>Edit plan
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Conflict banner ── -->
+{% if conflicts %}
+<div class="alert alert-danger d-flex gap-2 align-items-start mb-4" style="font-size:13px">
+  <i class="bi bi-exclamation-triangle-fill mt-1 flex-shrink-0"></i>
+  <div>
+    <strong>{{ conflicts|length }} unresolved conflict{{ conflicts|length|pluralize }}</strong>
+    — review and resolve before finalising allocations.
+    <ul class="mb-0 mt-1 ps-3">
+      {% for c in conflicts|slice:":5" %}
+      <li>
+        <span class="fw-500">{{ c.get_conflict_type_display }}</span>
+        {% if c.affected_sprint %} · {{ c.affected_sprint.name }}{% endif %}
+        — {{ c.description|truncatewords:12 }}
+        <span class="rp-badge ms-1
+          {% if c.severity == 'ERROR' %}rp-badge--danger
+          {% else %}rp-badge--warning{% endif %}" style="font-size:10px">
+          {{ c.severity }}
+        </span>
+      </li>
+      {% endfor %}
+      {% if conflicts|length > 5 %}
+      <li class="text-secondary">+ {{ conflicts|length|add:"-5" }} more…</li>
+      {% endif %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Unmapped projects banner (3.27) ── -->
+{% if unmapped %}
+<div class="alert alert-warning d-flex gap-2 align-items-center mb-4" style="font-size:13px">
+  <i class="bi bi-kanban flex-shrink-0"></i>
+  <span>
+    <strong>{{ unmapped|length }} active project{{ unmapped|length|pluralize }}</strong>
+    in {{ plan.financial_year.short_fy }} not yet mapped to this plan.
+    <a href="{% url 'resource_plan:configure' plan.pk %}" class="alert-link">Add them in Configure →</a>
+  </span>
+</div>
+{% endif %}
+
+{% if not team_grids %}
+<div class="rp-card text-center py-5 text-secondary">
+  <i class="bi bi-bar-chart-steps display-6 d-block mb-2 opacity-25"></i>
+  No teams assigned to this plan yet.
+  <a href="{% url 'resource_plan:configure' plan.pk %}">Configure projects and teams first</a>.
+</div>
+{% else %}
+
+<!-- ── Legend ── -->
+<div class="d-flex gap-3 flex-wrap mb-3 align-items-center" style="font-size:12px">
+  <span class="fw-500 text-secondary">Legend:</span>
+  <span class="rp-grid-legend rp-grid-cell--full">Full capacity</span>
+  <span class="rp-grid-legend rp-grid-cell--medium">Med capacity</span>
+  <span class="rp-grid-legend rp-grid-cell--low">Low capacity</span>
+  <span class="rp-grid-legend rp-grid-cell--over">Over allocated</span>
+  <span class="rp-grid-legend rp-grid-cell--auto">Auto-filled</span>
+  <span class="rp-grid-legend rp-grid-cell--manual">Manual override</span>
+  <span class="rp-grid-legend rp-grid-cell--locked">Locked (past)</span>
+  <span class="rp-grid-legend rp-grid-cell--placeholder">Projected leave</span>
+</div>
+
+<!-- ── One tab per team ── -->
+<ul class="nav nav-tabs rp-plan-tabs mb-0" id="teamTabs" role="tablist">
+  {% for tg in team_grids %}
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if forloop.first %}active{% endif %}"
+            id="tab-{{ tg.team.pk }}"
+            data-bs-toggle="tab"
+            data-bs-target="#panel-{{ tg.team.pk }}"
+            type="button" role="tab">
+      <i class="bi bi-people me-1"></i>
+      {{ tg.team.name }}
+      <span class="rp-badge rp-badge--muted ms-1" style="font-size:10px">
+        {{ tg.section1.rows|length }}
+      </span>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+
+<div class="tab-content rp-plan-tab-content" id="teamTabsContent">
+{% for tg in team_grids %}
+<div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
+     id="panel-{{ tg.team.pk }}"
+     role="tabpanel">
+
+  <!-- ══════════════════════════════════════════════════
+       SECTION 1 — Capacity (members vs sprints)
+       ══════════════════════════════════════════════════ -->
+  <div class="rp-accordion-section">
+    <button class="rp-accordion-header" data-bs-toggle="collapse"
+            data-bs-target="#s1-{{ tg.team.pk }}" aria-expanded="true">
+      <span>
+        <i class="bi bi-people-fill me-2 text-primary"></i>
+        <strong>Section 1 — Capacity</strong>
+        <span class="text-secondary ms-2" style="font-size:12px">
+          Members vs sprints · Available days after holidays &amp; leaves
+        </span>
+      </span>
+      <i class="bi bi-chevron-down rp-accordion-chevron"></i>
+    </button>
+
+    <div class="collapse show" id="s1-{{ tg.team.pk }}">
+      <div class="rp-grid-wrap">
+        <table class="rp-grid-table" id="grid-s1-{{ tg.team.pk }}">
+          <thead>
+            <tr>
+              <th class="rp-grid-th-fixed">Team member</th>
+              {% for sprint in sprints %}
+              <th class="rp-grid-th sprint-col"
+                  data-sprint="{{ sprint.pk }}"
+                  data-month="{{ sprint.month }}"
+                  title="{{ sprint.start_date|date:'d M' }} – {{ sprint.end_date|date:'d M Y' }}">
+                <div class="rp-grid-th-label">{{ sprint.name }}</div>
+                <div class="rp-grid-th-sub">{{ sprint.working_days }}d</div>
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in tg.section1.rows %}
+            <tr class="{% if row.is_architect %}rp-grid-row--architect{% endif %}">
+              <td class="rp-grid-td-fixed">
+                <div class="d-flex align-items-center gap-1">
+                  {% if row.is_architect %}
+                  <i class="bi bi-award-fill text-warning" title="Architect" style="font-size:11px"></i>
+                  {% endif %}
+                  <span>{{ row.member.display_name }}</span>
+                  {% if row.has_leave_warning %}
+                  <i class="bi bi-exclamation-circle text-warning ms-1"
+                     title="Fewer confirmed leaves than DEFAULT_HOLIDAYS — projected leaves added"
+                     style="font-size:11px"></i>
+                  {% endif %}
+                </div>
+              </td>
+              {% for sprint in sprints %}
+              {% with avail=row.cells|default_if_none:0 ph_days=row.placeholder_leave_sprints|default_if_none:0 %}
+              {# Lookup available days for this sprint #}
+              {% for s_pk, s_avail in row.cells.items %}
+              {% if s_pk == sprint.pk %}
+              <td class="rp-grid-cell
+                {% if s_avail >= 8 %}rp-grid-cell--full
+                {% elif s_avail >= 4 %}rp-grid-cell--medium
+                {% elif s_avail > 0 %}rp-grid-cell--low
+                {% else %}rp-grid-cell--zero{% endif %}
+                {% for p_pk, p_days in row.placeholder_leave_sprints.items %}{% if p_pk == sprint.pk %} rp-grid-cell--placeholder{% endif %}{% endfor %}"
+                  data-sprint="{{ sprint.pk }}"
+                  title="Available: {{ s_avail }}d{% for p_pk, p_days in row.placeholder_leave_sprints.items %}{% if p_pk == sprint.pk %} (incl. {{ p_days }}d projected leave){% endif %}{% endfor %}">
+                {{ s_avail }}
+              </td>
+              {% endif %}
+              {% endfor %}
+              {% endwith %}
+              {% endfor %}
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{{ sprints|length|add:'1' }}" class="text-center text-secondary py-3">
+                No active members in this team.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <!-- Totals row -->
+          <tfoot>
+            <tr class="rp-grid-tfoot">
+              <td class="rp-grid-td-fixed fw-600">Team total</td>
+              {% for sprint in sprints %}
+              {% for s_pk, s_total in tg.section1.totals.items %}
+              {% if s_pk == sprint.pk %}
+              <td class="rp-grid-cell fw-600" data-sprint="{{ sprint.pk }}">{{ s_total }}</td>
+              {% endif %}
+              {% endfor %}
+              {% endfor %}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       SECTION 2 — Allocations (projects vs engineers)
+       ══════════════════════════════════════════════════ -->
+  <div class="rp-accordion-section">
+    <button class="rp-accordion-header" data-bs-toggle="collapse"
+            data-bs-target="#s2-{{ tg.team.pk }}" aria-expanded="true">
+      <span>
+        <i class="bi bi-kanban-fill me-2 text-indigo"></i>
+        <strong>Section 2 — Allocations</strong>
+        <span class="text-secondary ms-2" style="font-size:12px">
+          Projects vs engineers · Editable days per sprint
+        </span>
+      </span>
+      <i class="bi bi-chevron-down rp-accordion-chevron"></i>
+    </button>
+
+    <div class="collapse show" id="s2-{{ tg.team.pk }}">
+      {% if tg.section2.project_groups %}
+      <div class="rp-grid-wrap">
+        <table class="rp-grid-table" id="grid-s2-{{ tg.team.pk }}">
+          <thead>
+            <tr>
+              <th class="rp-grid-th-fixed">Programme / Project / Engineer</th>
+              {% for sprint in sprints %}
+              <th class="rp-grid-th sprint-col"
+                  data-sprint="{{ sprint.pk }}"
+                  data-month="{{ sprint.month }}">
+                <div class="rp-grid-th-label">{{ sprint.name }}</div>
+                <div class="rp-grid-th-sub">{{ sprint.working_days }}d</div>
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for group in tg.section2.project_groups %}
+
+            {# Programme / project header row #}
+            <tr class="rp-grid-row--project-header">
+              <td class="rp-grid-td-fixed rp-grid-project-label" colspan="1">
+                <div class="fw-600" style="font-size:13px">
+                  {% if group.plan_project.project.programme_name %}
+                  <span class="text-secondary" style="font-size:11px">{{ group.plan_project.project.programme_name }} /</span>
+                  {% endif %}
+                  <a href="{% url 'projects:detail' group.plan_project.project.pk %}" class="rp-link">
+                    {{ group.plan_project.project.project_name }}
+                  </a>
+                </div>
+                {% if group.plan_project.days_required %}
+                <div class="text-secondary" style="font-size:11px">
+                  {{ group.plan_project.days_required }}d required ·
+                  {{ group.plan_project.get_basis_display }}
+                </div>
+                {% endif %}
+              </td>
+              {# Blank cells for the project header row #}
+              {% for sprint in sprints %}
+              <td class="rp-grid-cell rp-grid-cell--project-header" data-sprint="{{ sprint.pk }}"></td>
+              {% endfor %}
+            </tr>
+
+            {# Engineer assignment rows #}
+            {% for arow in group.assignment_rows %}
+            <tr class="rp-grid-row--assignment
+                {% if arow.assignment.assignment_type == 'ARCHITECT' %}rp-grid-row--architect{% endif %}
+                {% if arow.assignment.assignment_type == 'ADHOC' %}rp-grid-row--adhoc{% endif %}
+                {% if arow.assignment.is_interim %}rp-grid-row--interim{% endif %}"
+                data-assignment="{{ arow.assignment.pk }}">
+
+              <td class="rp-grid-td-fixed rp-grid-td-engineer">
+                <div class="d-flex align-items-center gap-1 ps-3">
+                  {% if arow.assignment.assignment_type == 'ARCHITECT' %}
+                  <i class="bi bi-award-fill text-warning" style="font-size:10px" title="Architect"></i>
+                  {% elif arow.assignment.assignment_type == 'ADHOC' %}
+                  <i class="bi bi-lightning-fill text-secondary" style="font-size:10px" title="Adhoc/BAU"></i>
+                  {% elif arow.assignment.is_interim %}
+                  <i class="bi bi-arrow-left-right text-info" style="font-size:10px" title="Interim"></i>
+                  {% else %}
+                  <i class="bi bi-person-fill text-secondary" style="font-size:10px"></i>
+                  {% endif %}
+                  <span style="font-size:12.5px">{{ arow.assignment.display_name }}</span>
+                  {% if arow.assignment.is_interim %}
+                  <span class="rp-badge" style="font-size:9px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8">Interim</span>
+                  {% endif %}
+                </div>
+              </td>
+
+              {% for sprint in sprints %}
+              {% for s_pk, cell_data in arow.cells.items %}
+              {% if s_pk == sprint.pk %}
+              <td class="rp-grid-cell rp-grid-cell--editable
+                    {% if cell_data.is_locked %}rp-grid-cell--locked
+                    {% elif cell_data.is_auto and cell_data.days > 0 %}rp-grid-cell--auto
+                    {% elif not cell_data.is_auto and cell_data.days > 0 %}rp-grid-cell--manual{% endif %}"
+                  data-sprint="{{ sprint.pk }}"
+                  data-assignment="{{ arow.assignment.pk }}"
+                  data-plan="{{ plan.pk }}"
+                  data-days="{{ cell_data.days }}"
+                  data-locked="{{ cell_data.is_locked|yesno:'true,false' }}"
+                  title="{% if cell_data.is_locked %}Locked — past sprint{% elif cell_data.is_auto %}Auto-filled{% else %}Manually set{% endif %}">
+                {% if cell_data.days > 0 %}{{ cell_data.days }}{% else %}<span class="rp-grid-zero">—</span>{% endif %}
+              </td>
+              {% endif %}
+              {% endfor %}
+              {% endfor %}
+
+            </tr>
+            {% empty %}
+            <tr>
+              <td class="rp-grid-td-fixed ps-4 text-secondary" style="font-size:12px"
+                  colspan="{{ sprints|length|add:'1' }}">
+                No engineers assigned to this project for {{ tg.team.name }}.
+                <a href="{% url 'resource_plan:configure' plan.pk %}" class="rp-link">Assign →</a>
+              </td>
+            </tr>
+            {% endfor %}
+
+            {% endfor %}{# /project_groups #}
+          </tbody>
+
+          <!-- Section 2 totals row -->
+          <tfoot>
+            <tr class="rp-grid-tfoot">
+              <td class="rp-grid-td-fixed fw-600">Total allocated</td>
+              {% for sprint in sprints %}
+              {% for s_pk, s_total in tg.section2.totals.items %}
+              {% if s_pk == sprint.pk %}
+              <td class="rp-grid-cell fw-600" data-sprint="{{ sprint.pk }}">
+                {% if s_total > 0 %}{{ s_total }}{% else %}<span class="rp-grid-zero">—</span>{% endif %}
+              </td>
+              {% endif %}
+              {% endfor %}
+              {% endfor %}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% else %}
+      <div class="p-4 text-center text-secondary" style="font-size:13px">
+        No projects allocated for {{ tg.team.name }}.
+        <a href="{% url 'resource_plan:configure' plan.pk %}" class="rp-link">Configure →</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       SECTION 3 — Summary (allocated vs available)
+       ══════════════════════════════════════════════════ -->
+  <div class="rp-accordion-section">
+    <button class="rp-accordion-header" data-bs-toggle="collapse"
+            data-bs-target="#s3-{{ tg.team.pk }}" aria-expanded="true">
+      <span>
+        <i class="bi bi-bar-chart-line-fill me-2 text-success"></i>
+        <strong>Section 3 — Summary</strong>
+        <span class="text-secondary ms-2" style="font-size:12px">
+          Allocated vs available · Remaining capacity per engineer
+        </span>
+      </span>
+      <i class="bi bi-chevron-down rp-accordion-chevron"></i>
+    </button>
+
+    <div class="collapse show" id="s3-{{ tg.team.pk }}">
+      <div class="rp-grid-wrap">
+        <table class="rp-grid-table" id="grid-s3-{{ tg.team.pk }}">
+          <thead>
+            <tr>
+              <th class="rp-grid-th-fixed">Team member</th>
+              {% for sprint in sprints %}
+              <th class="rp-grid-th sprint-col"
+                  data-sprint="{{ sprint.pk }}"
+                  data-month="{{ sprint.month }}">
+                <div class="rp-grid-th-label">{{ sprint.name }}</div>
+                <div class="rp-grid-th-sub">{{ sprint.working_days }}d</div>
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in tg.section3.rows %}
+            <tr>
+              <td class="rp-grid-td-fixed">{{ row.display_name }}</td>
+              {% for sprint in sprints %}
+              {% for s_pk, cell in row.cells.items %}
+              {% if s_pk == sprint.pk %}
+              <td class="rp-grid-cell rp-grid-cell--summary
+                    {% if cell.remaining < 0 %}rp-grid-cell--over
+                    {% elif cell.remaining == 0 and cell.allocated > 0 %}rp-grid-cell--ontrack
+                    {% endif %}"
+                  data-sprint="{{ sprint.pk }}"
+                  title="Allocated: {{ cell.allocated }}d / Available: {{ cell.available }}d / Remaining: {{ cell.remaining }}d">
+                <div class="rp-summary-alloc">{{ cell.allocated }}d</div>
+                <div class="rp-summary-remain
+                  {% if cell.remaining < 0 %}text-danger
+                  {% elif cell.remaining == 0 and cell.allocated > 0 %}text-success
+                  {% else %}text-secondary{% endif %}">
+                  {{ cell.remaining }}d
+                </div>
+              </td>
+              {% endif %}
+              {% endfor %}
+              {% endfor %}
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{{ sprints|length|add:'1' }}" class="text-center text-secondary py-3">
+                No data yet.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+
+          <!-- Section 3 totals row -->
+          <tfoot>
+            <tr class="rp-grid-tfoot">
+              <td class="rp-grid-td-fixed fw-600">Team total</td>
+              {% for sprint in sprints %}
+              {% for s_pk, t in tg.section3.totals.items %}
+              {% if s_pk == sprint.pk %}
+              <td class="rp-grid-cell rp-grid-tfoot-summary
+                    {% if t.remaining < 0 %}rp-grid-cell--over
+                    {% elif t.remaining == 0 and t.allocated > 0 %}rp-grid-cell--ontrack{% endif %}"
+                  data-sprint="{{ sprint.pk }}"
+                  title="Allocated: {{ t.allocated }}d / Available: {{ t.available }}d">
+                <div class="rp-summary-alloc fw-600">{{ t.allocated }}d</div>
+                <div class="rp-summary-remain
+                  {% if t.remaining < 0 %}text-danger
+                  {% elif t.remaining == 0 and t.allocated > 0 %}text-success
+                  {% else %}text-secondary{% endif %}">
+                  {{ t.remaining }}d
+                </div>
+              </td>
+              {% endif %}
+              {% endfor %}
+              {% endfor %}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>{# /tab-pane #}
+{% endfor %}{# /team_grids #}
+</div>{# /tab-content #}
+{% endif %}
+
+<!-- ── Inline cell edit tooltip (appears on click) ── -->
+<div id="rp-cell-editor" class="rp-cell-editor d-none">
+  <label class="rp-label mb-1" style="font-size:11px">Days (0–10, ×0.25)</label>
+  <div class="d-flex gap-1 align-items-center">
+    <input type="number" id="rp-cell-input"
+           class="form-control rp-input" style="width:80px;font-size:13px"
+           step="0.25" min="0" max="10" />
+    <button class="btn btn-sm btn-primary" onclick="saveCellEdit()">
+      <i class="bi bi-check-lg"></i>
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="closeCellEditor()">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+  <p class="rp-hint mt-1 mb-0" id="rp-cell-hint"></p>
+</div>
+
+<!-- Delete plan modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Delete resource plan?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0">
+          <strong id="delete-plan-name"></strong> and all its allocations will be permanently removed.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger"
+                id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window._planPk    = {{ plan.pk }};
+  window._csrfToken = '{{ csrf_token }}';
+  window._cellUpdateBase = '/resource-plan/{{ plan.pk }}/cell/';
+</script>
+<script src="{% static 'js/resource_plan.js' %}"></script>
+{% endblock %}

@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'apps.leaves',
     'apps.budgets',
     'apps.sprints',
+    'apps.resource_plan',
 ]
 
 MIDDLEWARE = [

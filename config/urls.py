@@ -27,6 +27,10 @@ from apps.holidays.api_views import HolidayViewSet
 from apps.leaves.api_views import LeaveViewSet
 from apps.budgets.api_views import BudgetViewSet
 from apps.sprints.api_views import SprintViewSet
+from apps.resource_plan.api_views   import (
+    ResourcePlanViewSet,
+    ResourcePlanConflictViewSet,
+)
 
 router = DefaultRouter()
 router.register(r'teams', TeamViewSet, basename='team')
@@ -39,12 +43,17 @@ router.register(r'holidays', HolidayViewSet, basename='holiday')
 router.register(r'leaves', LeaveViewSet, basename='leave')
 router.register(r'budgets', BudgetViewSet, basename='budget')
 router.register(r'sprints', SprintViewSet, basename='sprint')
+router.register(r'resource-plans', ResourcePlanViewSet, basename='resource-plan')
+router.register(r'resource-conflicts', ResourcePlanConflictViewSet, basename='resource-conflict')
+
+from apps.resource_plan.api_urls import urlpatterns as resource_plan_api_extra
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
     # REST API
     path('api/v1/', include(router.urls)),
+    path('api/v1/', include(resource_plan_api_extra)),
 
     # Manage
     path('teams/', include('apps.teams.urls')),
@@ -57,6 +66,7 @@ urlpatterns = [
     # Plan
     path('leaves/', include('apps.leaves.urls')),
     path('sprints/', include('apps.sprints.urls')),
+    path('resource-plan/', include('apps.resource_plan.urls')),
 
     # Config / Settings
     path('settings/skills/', include('apps.skills.urls')),

@@ -140,7 +140,8 @@
          class="rp-sidebar-link {% if request.resolver_match.app_name == 'sprints' %}active{% endif %}">
         <i class="bi bi-calendar3-range"></i> Sprints
       </a>
-      <a href="#" class="rp-sidebar-link">
+      <a href="{% url 'resource_plan:list' %}"
+         class="rp-sidebar-link {% if request.resolver_match.app_name == 'resource_plan' %}active{% endif %}">
         <i class="bi bi-bar-chart-steps"></i> Resource Plan
       </a>
     </div>

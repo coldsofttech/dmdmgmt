@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Configure — {{ plan.name }} — Demand Management{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'resource_plan:list' %}" class="btn btn-ghost-icon">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h1 class="rp-page-title">Configure — {{ plan.name }}</h1>
+      <p class="rp-page-subtitle">
+        Step 2 — scope projects, assign teams, define phases
+        <span class="rp-code ms-2">{{ plan.financial_year.short_fy }}</span>
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'resource_plan:edit' plan.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-gear me-1"></i>Plan settings
+    </a>
+    <a href="{% url 'resource_plan:detail' plan.pk %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-bar-chart-steps me-1"></i>View grid
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  <!-- ── Left: Add projects ── -->
+  <div class="col-lg-4">
+
+    <!-- Add project form -->
+    <div class="rp-card mb-4">
+      <h6 class="rp-card-heading">
+        <i class="bi bi-plus-circle me-1 text-primary"></i>Add project to plan
+      </h6>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="_action" value="add_project">
+
+        <div class="rp-field mb-3">
+          <label class="rp-label">Project <span class="rp-required">*</span></label>
+          <select name="{{ add_project_form.project.html_name }}"
+                  class="form-select rp-select {% if add_project_form.project.errors %}is-invalid{% endif %}">
+            <option value="">— Select project —</option>
+            {% for p in add_project_form.fields.project.queryset %}
+            <option value="{{ p.pk }}">
+              {% if p.programme_name %}{{ p.programme_name }}: {% endif %}{{ p.project_name }}
+            </option>
+            {% endfor %}
+          </select>
+          {% if add_project_form.project.errors %}
+          <div class="text-danger" style="font-size:12px">{{ add_project_form.project.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="rp-field mb-3">
+          <label class="rp-label">Basis for days calculation <span class="rp-required">*</span></label>
+          <select name="{{ add_project_form.basis.html_name }}"
+                  class="form-select rp-select" onchange="toggleCustomAmount(this)">
+            {% for val, label in add_project_form.fields.basis.choices %}
+            <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <p class="rp-hint mt-1">
+            Estimates take priority. Budget used as fallback. Custom lets you enter any £ amount.
+          </p>
+        </div>
+
+        <div class="rp-field mb-3 d-none" id="custom-amount-field">
+          <label class="rp-label">Custom amount (£)</label>
+          <input type="number" step="0.01" min="0"
+                 name="{{ add_project_form.custom_amount.html_name }}"
+                 class="form-control rp-input"
+                 placeholder="e.g. 50000" />
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="rp-label">Priority override</label>
+            <select name="{{ add_project_form.priority_override.html_name }}"
+                    class="form-select rp-select">
+              <option value="">— Inherit —</option>
+              {% for val, label in add_project_form.fields.priority_override.choices %}
+              {% if val %}<option value="{{ val }}">{{ label }}</option>{% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="rp-label">Confidence override</label>
+            <select name="{{ add_project_form.confidence_override.html_name }}"
+                    class="form-select rp-select">
+              <option value="">— Inherit —</option>
+              {% for val, label in add_project_form.fields.confidence_override.choices %}
+              {% if val %}<option value="{{ val }}">{{ label }}</option>{% endif %}
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="rp-field mb-3">
+          <div class="form-check">
+            <input type="checkbox" name="{{ add_project_form.dates_strict.html_name }}"
+                   id="id_dates_strict" class="form-check-input" />
+            <label class="form-check-label rp-label" for="id_dates_strict">
+              Dates are strict (no right-shifting allowed)
+            </label>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-sm btn-primary w-100">
+          <i class="bi bi-plus me-1"></i>Add project
+        </button>
+      </form>
+    </div>
+
+    <!-- Unmapped projects alert (3.27) -->
+    {% if unmapped %}
+    <div class="rp-card rp-card--muted">
+      <h6 class="fw-500 mb-2" style="font-size:13px">
+        <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+        {{ unmapped|length }} active project{{ unmapped|length|pluralize }} not in this plan
+      </h6>
+      <ul class="list-unstyled mb-0" style="font-size:12.5px">
+        {% for p in unmapped|slice:":8" %}
+        <li class="d-flex justify-content-between align-items-center py-1 border-bottom">
+          <span class="text-secondary">
+            {% if p.programme_name %}{{ p.programme_name }}: {% endif %}{{ p.project_name }}
+          </span>
+          <span class="rp-badge-status rp-badge-status--{{ p.status|lower }}"
+                style="font-size:10px">{{ p.get_status_display }}</span>
+        </li>
+        {% endfor %}
+        {% if unmapped|length > 8 %}
+        <li class="text-secondary pt-1" style="font-size:12px">
+          + {{ unmapped|length|add:"-8" }} more…
+        </li>
+        {% endif %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- ── Right: scoped projects tree ── -->
+  <div class="col-lg-8">
+
+    {% if plan_projects %}
+    {% for pp in plan_projects %}
+    <div class="rp-card mb-4">
+
+      <!-- Project header -->
+      <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+        <div>
+          <h5 class="fw-600 mb-0" style="font-size:15px">
+            <a href="{% url 'projects:detail' pp.project.pk %}" class="rp-link">
+              {{ pp.project.display_name }}
+            </a>
+          </h5>
+          <div class="d-flex gap-2 flex-wrap mt-1">
+            <span class="rp-badge rp-badge--muted">{{ pp.get_basis_display }}</span>
+            {% if pp.days_required %}
+            <span class="rp-badge" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8">
+              <i class="bi bi-calendar2-week me-1"></i>{{ pp.days_required }}d required
+            </span>
+            {% endif %}
+            <span class="rp-badge-level rp-badge-level--{{ pp.effective_priority|lower }}">
+              {{ pp.get_effective_priority_display|default:pp.effective_priority }}
+            </span>
+          </div>
+        </div>
+        <form method="post" class="d-inline">
+          {% csrf_token %}
+          <input type="hidden" name="_action" value="remove_project">
+          <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
+          <button type="submit" class="btn btn-ghost-icon btn-ghost-icon--danger" title="Remove from plan">
+            <i class="bi bi-trash"></i>
+          </button>
+        </form>
+      </div>
+
+      <!-- Teams assigned to this project -->
+      {% for ppt in pp.project_teams.all %}
+      <div class="border rounded mb-3 p-3" style="background:#fafafa">
+        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <span class="fw-500" style="font-size:14px">
+              <i class="bi bi-people me-1 text-secondary"></i>{{ ppt.team.name }}
+            </span>
+            <span class="rp-badge rp-badge--muted" style="font-size:11px">
+              Seq. {{ ppt.sequence_order }}
+            </span>
+            <span class="rp-badge rp-badge--muted" style="font-size:11px">
+              {{ ppt.allocation_value }}{% if ppt.allocation_type == 'PERCENT' %}%
+              {% elif ppt.allocation_type == 'BUDGET' %}£{% else %}d{% endif %}
+              {% if ppt.allocated_days %} = {{ ppt.allocated_days }}d{% endif %}
+            </span>
+          </div>
+          <!-- Add phase form trigger -->
+          <button class="btn btn-ghost-icon" style="font-size:12px;height:auto;padding:3px 8px"
+                  onclick="showPhaseForm('{{ ppt.pk }}')" title="Add phase">
+            <i class="bi bi-plus me-1"></i>Add phase
+          </button>
+        </div>
+
+        <!-- Phases for this team -->
+        {% for phase in ppt.phases.all %}
+        <div class="d-flex gap-2 align-items-start mb-2 ps-2 border-start">
+          <div class="flex-grow-1">
+            <span class="fw-500" style="font-size:13px">{{ phase.name }}</span>
+            <span class="text-secondary ms-2" style="font-size:12px">
+              {% if phase.start_sprint %}{{ phase.start_sprint.name }}{% else %}—{% endif %}
+              →
+              {% if phase.end_sprint %}{{ phase.end_sprint.name }}{% else %}—{% endif %}
+            </span>
+            <span class="rp-badge rp-badge--muted ms-1" style="font-size:10px">
+              {{ phase.get_ramp_pattern_display }}
+            </span>
+            {% if phase.predecessor_phase %}
+            <span class="rp-badge ms-1" style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:10px">
+              {{ phase.dependency_type }} → {{ phase.predecessor_phase.name }}
+            </span>
+            {% endif %}
+
+            <!-- Assignments for this phase -->
+            {% for a in phase.assignments.all %}
+            <div class="d-flex align-items-center gap-2 mt-1 ms-3" style="font-size:12px">
+              <i class="bi bi-person-fill text-secondary"></i>
+              <span>{{ a.display_name }}</span>
+              <span class="rp-badge rp-badge--muted" style="font-size:10px">
+                {{ a.get_assignment_type_display }}
+              </span>
+              {% if a.is_interim %}
+              <span class="rp-badge" style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:10px">
+                Interim
+              </span>
+              {% endif %}
+              {% if a.pause_from_sprint %}
+              <span class="rp-badge" style="background:#fafafa;border:1px solid #e2e8f0;color:#64748b;font-size:10px">
+                Paused {{ a.pause_from_sprint.name }}{% if a.resume_at_sprint %} → {{ a.resume_at_sprint.name }}{% endif %}
+              </span>
+              {% endif %}
+            </div>
+            {% empty %}
+            <div class="text-secondary ms-3 mt-1" style="font-size:12px">
+              No engineers assigned —
+              <a href="#" onclick="showAssignForm('{{ phase.pk }}')" class="rp-link">assign now</a>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% empty %}
+        <p class="text-secondary mb-0" style="font-size:12.5px">
+          No phases yet —
+          <a href="#" onclick="showPhaseForm('{{ ppt.pk }}')" class="rp-link">add a phase</a>.
+        </p>
+        {% endfor %}
+      </div>
+      {% empty %}
+      <!-- Add team form (inline) -->
+      <div class="border rounded p-3 mb-2" style="border-style:dashed !important;background:#fafafa">
+        <p class="text-secondary mb-2" style="font-size:13px">
+          No teams assigned yet. Assign at least one team to define who works on this project.
+        </p>
+        <form method="post" class="d-flex gap-2 flex-wrap align-items-end">
+          {% csrf_token %}
+          <input type="hidden" name="_action" value="add_team">
+          <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
+          <select name="{{ add_team_form.team.html_name }}"
+                  class="form-select rp-select" style="max-width:200px">
+            <option value="">— Team —</option>
+            {% for t in add_team_form.fields.team.queryset %}
+            <option value="{{ t.pk }}">{{ t.name }}</option>
+            {% endfor %}
+          </select>
+          <select name="{{ add_team_form.allocation_type.html_name }}"
+                  class="form-select rp-select" style="max-width:140px">
+            {% for val, label in add_team_form.fields.allocation_type.choices %}
+            <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <input type="number" step="0.01" min="0"
+                 name="{{ add_team_form.allocation_value.html_name }}"
+                 class="form-control rp-input" style="max-width:90px"
+                 placeholder="100" />
+          <input type="number" min="1"
+                 name="{{ add_team_form.sequence_order.html_name }}"
+                 value="1" class="form-control rp-input" style="max-width:70px"
+                 title="Sequence order (same number = parallel)" />
+          <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-plus me-1"></i>Assign team
+          </button>
+        </form>
+      </div>
+      {% endfor %}
+
+      <!-- Always-available inline add-team form -->
+      {% if pp.project_teams.exists %}
+      <details class="mt-2">
+        <summary class="rp-link" style="font-size:12.5px;cursor:pointer">
+          <i class="bi bi-plus me-1"></i>Add another team to this project
+        </summary>
+        <form method="post" class="d-flex gap-2 flex-wrap align-items-end mt-2">
+          {% csrf_token %}
+          <input type="hidden" name="_action" value="add_team">
+          <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
+          <select name="{{ add_team_form.team.html_name }}"
+                  class="form-select rp-select" style="max-width:200px">
+            <option value="">— Team —</option>
+            {% for t in add_team_form.fields.team.queryset %}
+            <option value="{{ t.pk }}">{{ t.name }}</option>
+            {% endfor %}
+          </select>
+          <select name="{{ add_team_form.allocation_type.html_name }}"
+                  class="form-select rp-select" style="max-width:140px">
+            {% for val, label in add_team_form.fields.allocation_type.choices %}
+            <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <input type="number" step="0.01" min="0"
+                 name="{{ add_team_form.allocation_value.html_name }}"
+                 class="form-control rp-input" style="max-width:90px" placeholder="100" />
+          <input type="number" min="1"
+                 name="{{ add_team_form.sequence_order.html_name }}"
+                 value="{{ pp.project_teams.count|add:'1' }}"
+                 class="form-control rp-input" style="max-width:70px"
+                 title="Sequence order" />
+          <button type="submit" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-plus me-1"></i>Assign
+          </button>
+        </form>
+      </details>
+      {% endif %}
+
+    </div>
+    {% endfor %}
+
+    {% else %}
+    <div class="rp-card text-center py-5 text-secondary">
+      <i class="bi bi-kanban display-6 d-block mb-2 opacity-25"></i>
+      No projects scoped yet. Add projects using the form on the left.
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/resource_plan.js' %}"></script>
+<script>
+function toggleCustomAmount(select) {
+  const field = document.getElementById('custom-amount-field');
+  if (field) field.classList.toggle('d-none', select.value !== 'CUSTOM');
+}
+function showPhaseForm(pptPk) {
+  // Phase 2 will open a modal/panel; for now just scroll to bottom
+  alert('Phase configuration will be fully interactive in Phase 2. Use the form in the modal.');
+}
+function showAssignForm(phasePk) {
+  alert('Engineer assignment will be fully interactive in Phase 2.');
+}
+</script>
+{% endblock %}

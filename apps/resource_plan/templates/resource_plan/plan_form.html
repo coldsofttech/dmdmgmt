@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+  {% if is_create %}New Resource Plan{% else %}Edit Resource Plan{% endif %} — Demand Management
+{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center gap-3">
+  {% if is_create %}
+  <a href="{% url 'resource_plan:list' %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  {% else %}
+  <a href="{% url 'resource_plan:detail' plan.pk %}" class="btn btn-ghost-icon">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  {% endif %}
+  <div>
+    <h1 class="rp-page-title">
+      {% if is_create %}New Resource Plan{% else %}Edit — {{ plan.name }}{% endif %}
+    </h1>
+    <p class="rp-page-subtitle">
+      {% if is_create %}
+        Step 1 of 3 — Name and scope. Then configure projects and teams.
+      {% else %}
+        Update plan settings
+      {% endif %}
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-5">
+    <div class="rp-card">
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <!-- Name -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.name.id_for_label }}">
+            Plan name <span class="rp-required">*</span>
+          </label>
+          <input type="text"
+                 id="{{ form.name.id_for_label }}"
+                 name="{{ form.name.html_name }}"
+                 value="{{ form.name.value|default:'' }}"
+                 class="form-control rp-input {% if form.name.errors %}is-invalid{% endif %}"
+                 placeholder="e.g. FY25-26 Full Delivery Plan"
+                 autofocus />
+          {% if form.name.errors %}
+          <div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Financial year -->
+        <div class="rp-field mb-4">
+          <label class="rp-label">Financial year <span class="rp-required">*</span></label>
+          <select name="{{ form.financial_year.html_name }}"
+                  class="form-select rp-select {% if form.financial_year.errors %}is-invalid{% endif %}">
+            <option value="">— Select financial year —</option>
+            {% for fy in form.fields.financial_year.queryset %}
+            <option value="{{ fy.pk }}"
+              {% if form.financial_year.value|stringformat:"s" == fy.pk|stringformat:"s" %}selected{% endif %}>
+              {{ fy.long_fy }}{% if fy.is_active %} (Active){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          {% if form.financial_year.errors %}
+          <div class="invalid-feedback d-block">{{ form.financial_year.errors.0 }}</div>
+          {% endif %}
+          <p class="rp-hint mt-1">Plans are FY-wide. Projects and teams are scoped in the next step.</p>
+        </div>
+
+        <!-- Status -->
+        {% if not is_create %}
+        <div class="rp-field mb-4">
+          <label class="rp-label">Status</label>
+          <select name="{{ form.status.html_name }}" class="form-select rp-select">
+            {% for val, label in form.fields.status.choices %}
+            <option value="{{ val }}"
+              {% if form.status.value == val %}selected{% endif %}>
+              {{ label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <!-- Allocation threshold -->
+        <div class="rp-field mb-4">
+          <label class="rp-label" for="{{ form.allocation_threshold_pct.id_for_label }}">
+            Allocation threshold (%)
+          </label>
+          <input type="number" step="0.5" min="0" max="50"
+                 id="{{ form.allocation_threshold_pct.id_for_label }}"
+                 name="{{ form.allocation_threshold_pct.html_name }}"
+                 value="{{ form.allocation_threshold_pct.value|default:'10' }}"
+                 class="form-control rp-input" style="max-width:120px" />
+          <p class="rp-hint mt-1">
+            Acceptable over/under allocation. Default 10% — e.g. £10k budget → £11k allocated is acceptable.
+          </p>
+        </div>
+
+        <!-- Scope notes -->
+        <div class="rp-field mb-5">
+          <label class="rp-label" for="{{ form.scope_notes.id_for_label }}">Scope notes</label>
+          <textarea id="{{ form.scope_notes.id_for_label }}"
+                    name="{{ form.scope_notes.html_name }}"
+                    class="form-control rp-input"
+                    rows="2"
+                    placeholder="Optional: describe what this plan covers…">{{ form.scope_notes.value|default:'' }}</textarea>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger mb-4">
+          {% for err in form.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>
+            {% if is_create %}Create plan & configure projects{% else %}Save changes{% endif %}
+          </button>
+          <a href="{% url 'resource_plan:list' %}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tips -->
+  <div class="col-lg-4 offset-lg-1 mt-4 mt-lg-0">
+    <div class="rp-card rp-card--muted">
+      <h6 class="fw-600 mb-3"><i class="bi bi-info-circle me-2"></i>How plans work</h6>
+      <ul class="rp-tip-list">
+        <li><strong>Step 1</strong> (here): Name the plan and select its financial year.</li>
+        <li><strong>Step 2</strong>: Scope in projects, assign teams, set phases and dependencies.</li>
+        <li><strong>Step 3</strong>: Review the allocation grid and resolve any conflicts.</li>
+        <li>A plan is FY-wide — you choose which projects and teams to include in Step 2.</li>
+        <li>Multiple plans can exist per FY (e.g. one per programme or team).</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
