@@ -110,6 +110,22 @@
           {% endif %}
         </dd>
 
+        <dt>Tentative timelines</dt>
+        <dd>
+          {% with phases=pp.project_teams.all|slice:":1" %}
+          {% for ppt in phases %}{% for ph in ppt.phases.all|slice:":1" %}
+          {% if ph.start_sprint and ph.end_sprint %}
+          <span style="font-size:12.5px">
+            {{ ph.start_sprint.name }} ({{ ph.start_sprint.month }})
+            → {{ ph.end_sprint.name }} ({{ ph.end_sprint.month }})
+          </span>
+          {% else %}
+          <span class="text-secondary" style="font-size:12.5px">Not set</span>
+          {% endif %}
+          {% endfor %}{% endfor %}
+          {% endwith %}
+        </dd>
+
         <dt>Dates strict</dt>
         <dd>
           {% if pp.dates_strict %}
@@ -360,7 +376,15 @@
               {% if a.resume_at_sprint %}→ {{ a.resume_at_sprint.name }}{% endif %}
             </span>
             {% endif %}
-            <div class="ms-auto d-flex gap-1">
+            {% for g in a.gaps.all %}
+            <span class="text-secondary" style="font-size:10.5px;display:block">
+              <i class="bi bi-pause-circle text-warning me-1"></i>
+              Gap {{ forloop.counter }}: {{ g.pause_from_sprint.name|default:"?" }}
+              → {% if g.resume_at_sprint %}{{ g.resume_at_sprint.name }}{% else %}<em>open</em>{% endif %}
+              {% if g.is_project_level %}<span class="rp-badge rp-badge--muted ms-1" style="font-size:9px">project</span>{% endif %}
+            </span>
+            {% endfor %}
+                        <div class="ms-auto d-flex gap-1">
               <button class="btn btn-ghost-icon"
                       style="width:22px;height:22px;font-size:10px"
                       onclick="editAssignment('{{ plan.pk }}', '{{ a.pk }}')">
@@ -379,11 +403,7 @@
           </p>
           {% endfor %}
         </div>
-        <button class="btn btn-ghost-icon"
-                style="font-size:12px;height:auto;padding:3px 8px;color:#6366f1"
-                onclick="addAssignment('{{ plan.pk }}', '{{ phase.pk }}')">
-          <i class="bi bi-person-plus me-1"></i>Assign engineer
-        </button>
+        <div class="d-flex justify-content-end mt-2"><button class="btn btn-primary px-4" style="font-size:12.5px" onclick="addAssignment('{{ plan.pk }}', '{{ phase.pk }}')"><i class="bi bi-person-plus me-1"></i>Assign engineer</button></div>
       </div>
       {% empty %}
       <p class="text-secondary" style="font-size:12.5px">
@@ -603,6 +623,7 @@ async function addAssignment(planPk, phasePk) {
   bodyEl.innerHTML = await res.text();
   document.getElementById('save-assignment-btn')?.addEventListener('click', async () => {
     const form = document.getElementById('assignment-form');
+    if (typeof collectGapsToHiddenFields === 'function') collectGapsToHiddenFields(form);
     const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/assignments/new/`, {
       method:'POST', headers:{'X-CSRFToken':_csrf}, body: new FormData(form),
     });
@@ -625,6 +646,7 @@ async function editAssignment(planPk, assignmentPk) {
   bodyEl.innerHTML = await res.text();
   document.getElementById('save-assignment-btn')?.addEventListener('click', async () => {
     const form = document.getElementById('assignment-form');
+    if (typeof collectGapsToHiddenFields === 'function') collectGapsToHiddenFields(form);
     const res  = await fetch(`/resource-plan/${planPk}/assignments/${assignmentPk}/edit/`, {
       method:'POST', headers:{'X-CSRFToken':_csrf}, body: new FormData(form),
     });

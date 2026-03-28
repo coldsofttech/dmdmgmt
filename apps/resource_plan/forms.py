@@ -91,12 +91,12 @@ class ResourcePlanProjectForm(forms.ModelForm):
         self.fields['confidence_override'].required = False
         self.fields['custom_amount'].required       = False
         self.fields['notes'].required               = False
-        self._plan = plan  # store for use in template context
+        self._plan = plan
         # Add blank option to override fields
         for f in ('priority_override', 'confidence_override'):
             self.fields[f].choices = [('', '— Inherit from project —')] + list(
                 self.fields[f].choices
-            )[1:]
+            )[1:]  # strip default empty first choice then prepend ours
 
     def project_budget_map(self):
         """
@@ -191,28 +191,38 @@ class ResourcePlanPhaseForm(forms.ModelForm):
         self.fields['end_sprint'].queryset     = sprint_qs
         self.fields['start_sprint'].empty_label  = '— Select sprint —'
         self.fields['end_sprint'].empty_label    = '— Select sprint —'
-        self.fields['predecessor_phase'].empty_label = '— None —'
+        self.fields['predecessor_phase'].empty_label = '— None (same project) —'
         self.fields['predecessor_phase'].required = False
         self.fields['dependency_type'].required   = False
         self.fields['max_days_per_sprint'].required = False
         self.fields['notes'].required              = False
+        # Scope predecessor_phase to same plan's phases (excluding own project's phases
+        # is done in the template/JS — here we just limit to same plan)
+        if plan:
+            self.fields['predecessor_phase'].queryset = (
+                ResourcePlanPhase.objects.filter(
+                    plan_project_team__plan_project__plan=plan
+                ).select_related(
+                    'plan_project_team__team',
+                    'plan_project_team__plan_project__project',
+                ).order_by(
+                    'plan_project_team__plan_project__project__project_name',
+                    'sequence_order',
+                )
+            )
 
 
 class ResourcePlanAssignmentForm(forms.ModelForm):
     class Meta:
         model  = ResourcePlanAssignment
         fields = [
-            'team_member', 'placeholder_name', 'assignment_type',
+            'team_member', 'assignment_type',
             'is_interim', 'replaces_assignment',
             'pause_from_sprint', 'resume_at_sprint',
             'notes',
         ]
         widgets = {
             'team_member':          forms.Select(attrs={'class': 'form-select rp-select'}),
-            'placeholder_name':     forms.TextInput(attrs={
-                'class': 'form-control rp-input',
-                'placeholder': 'e.g. ENGINEER X (TBC)',
-            }),
             'assignment_type':      forms.Select(attrs={'class': 'form-select rp-select'}),
             'is_interim':           forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'replaces_assignment':  forms.Select(attrs={'class': 'form-select rp-select'}),
@@ -233,7 +243,7 @@ class ResourcePlanAssignmentForm(forms.ModelForm):
             )
         else:
             self.fields['team_member'].queryset = TeamMember.objects.none()
-        self.fields['team_member'].empty_label = '— Select engineer or leave blank for TBC —'
+        self.fields['team_member'].empty_label = '— Auto-assign (engine will fill) —'
         self.fields['team_member'].required    = False
 
         if plan:
@@ -248,7 +258,6 @@ class ResourcePlanAssignmentForm(forms.ModelForm):
         self.fields['resume_at_sprint'].empty_label  = '— N/A —'
         self.fields['pause_from_sprint'].required  = False
         self.fields['resume_at_sprint'].required   = False
-        self.fields['placeholder_name'].required   = False
         self.fields['replaces_assignment'].required = False
         self.fields['notes'].required              = False
 

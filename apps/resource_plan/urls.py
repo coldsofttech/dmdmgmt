@@ -20,8 +20,6 @@ urlpatterns = [
     # ── Separate project config screen (Round A) ──────────
     path('<int:pk>/projects/',
          views.ResourcePlanProjectsView.as_view(), name='projects'),
-    path('<int:plan_pk>/projects/<int:pp_pk>/',
-         views.ResourcePlanProjectDetailView.as_view(), name='project_detail'),
     path('<int:plan_pk>/projects/<int:pp_pk>/edit/',
          views.ResourcePlanProjectEditView.as_view(), name='project_edit'),
     path('<int:plan_pk>/projects/<int:pp_pk>/delete/',
@@ -65,11 +63,23 @@ urlpatterns = [
     path('<int:plan_pk>/assignments/<int:assignment_pk>/interim/',
          views.ResourcePlanInterimView.as_view(), name='assignment_interim'),
 
-    # ── Configure: team-add modal ──────────────────────────
-    path('<int:plan_pk>/projects/<int:pp_pk>/team-form/',
-         views.ResourcePlanTeamAddView.as_view(), name='team_add'),
-
     # ── Phase 3: Export ───────────────────────────────────
     path('<int:pk>/export/',
          views.ResourcePlanExportView.as_view(), name='export'),
+
+    # ── Item 12: cross-project phases JSON ────────────────
+    path('<int:plan_pk>/projects/<int:pp_pk>/phases-json/',
+         views.ResourcePlanProjectPhasesJsonView.as_view(), name='project_phases_json'),
+
+    # ── Item 2/10: project detail + edit ──────────────────
+    path('<int:plan_pk>/projects/<int:pp_pk>/',
+         views.ResourcePlanProjectDetailView.as_view(), name='project_detail'),
+    path('<int:plan_pk>/projects/<int:pp_pk>/team-form/',
+         views.ResourcePlanTeamAddView.as_view(), name='team_add'),
+
+    # ── Items 1/15: gap CRUD ──────────────────────────────
+    path('<int:plan_pk>/assignments/<int:assignment_pk>/gaps/add/',
+         views.ResourcePlanGapCreateView.as_view(), name='gap_create'),
+    path('<int:plan_pk>/gaps/<int:gap_pk>/delete/',
+         views.ResourcePlanGapDeleteView.as_view(), name='gap_delete'),
 ]

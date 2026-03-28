@@ -40,6 +40,48 @@ def _apply_errors(form, exc):
 
 # ── List ──────────────────────────────────────────────────
 
+
+# ── Gap row helper ──────────────────────────────────────────
+def _save_gap_rows(post_data, assignment):
+    """
+    Reads new_gap_N fields from form POST and creates
+    ResourcePlanAssignmentGap rows for the assignment.
+    Silently skips rows with no pause sprint.
+    """
+    try:
+        from .models import ResourcePlanAssignmentGap
+        from apps.sprints.models import Sprint
+        count = int(post_data.get('_gap_count', 0))
+        for i in range(count):
+            pause_pk  = post_data.get(f'_gap_{i}')
+            if not pause_pk:
+                continue
+            import json
+            try:
+                d = json.loads(pause_pk)
+            except Exception:
+                continue
+            pause_id  = d.get('pause')
+            resume_id = d.get('resume')
+            proj_lvl  = d.get('project_level') == '1'
+            reason    = d.get('reason', '')
+            if not pause_id:
+                continue
+            pause_sprint  = Sprint.objects.filter(pk=pause_id).first()
+            resume_sprint = Sprint.objects.filter(pk=resume_id).first() if resume_id else None
+            if not pause_sprint:
+                continue
+            ResourcePlanAssignmentGap.objects.create(
+                assignment        = assignment,
+                pause_from_sprint = pause_sprint,
+                resume_at_sprint  = resume_sprint,
+                is_project_level  = proj_lvl,
+                reason            = reason,
+            )
+    except Exception:
+        pass  # Never let gap saving break the assignment save
+
+
 class ResourcePlanListView(ListView):
     template_name       = 'resource_plan/plan_list.html'
     context_object_name = 'plans'
@@ -512,26 +554,94 @@ class ResourcePlanProjectEditView(View):
     template_name = 'resource_plan/plan_project_edit.html'
 
     def _get(self, plan, pp):
-        from .forms import ResourcePlanProjectForm
+        # from .forms import ResourcePlanProjectForm
+        # form = ResourcePlanProjectForm(instance=pp)
+        # return render(self.request, self.template_name, {
+        #     'plan': plan, 'pp': pp, 'form': form
+        # })
+        from .forms import ResourcePlanProjectForm, ResourcePlanSprintBudgetForm
         form = ResourcePlanProjectForm(instance=pp)
+        # Build sprint JSON for the gap accordion JS
+        from apps.sprints.models import Sprint
+        sprints_qs = Sprint.objects.filter(
+            financial_year_id=plan.financial_year_id
+        ).order_by('start_date')
+        sprints_json = list(sprints_qs.values('pk', 'name'))
+        # Project-level gaps for the gap accordion (item 1)
+        from .models import ResourcePlanAssignmentGap
+        project_gaps = ResourcePlanAssignmentGap.objects.filter(
+            is_project_level=True,
+            assignment__phase__plan_project_team__plan_project=pp,
+        ).select_related(
+            'pause_from_sprint', 'resume_at_sprint'
+        ).distinct().order_by('pause_from_sprint__start_date')
+ 
         return render(self.request, self.template_name, {
-            'plan': plan, 'pp': pp, 'form': form
+            'plan':               plan,
+            'pp':                 pp,
+            'form':               form,
+            'sprint_budget_form': ResourcePlanSprintBudgetForm(plan=plan),
+            'sprints_json':       sprints_json,
+            'project_gaps':       list(project_gaps),
         })
 
     def get(self, request, plan_pk, pp_pk):
+        # self.request = request
+        # plan = ResourcePlanService.get_plan(plan_pk)
+        # pp   = ResourcePlanProject.objects.select_related('project').get(pk=pp_pk, plan=plan)
+        # return self._get(plan, pp)
         self.request = request
         plan = ResourcePlanService.get_plan(plan_pk)
-        pp   = ResourcePlanProject.objects.select_related('project').get(pk=pp_pk, plan=plan)
+        pp   = (
+            ResourcePlanProject.objects
+            .select_related('project')
+            .prefetch_related('sprint_budgets__sprint', 'project_teams__team')
+            .get(pk=pp_pk, plan=plan)
+        )
         return self._get(plan, pp)
 
     def post(self, request, plan_pk, pp_pk):
+        # plan = ResourcePlanService.get_plan(plan_pk)
+        # pp   = ResourcePlanProject.objects.select_related('project').get(pk=pp_pk, plan=plan)
+        # from .forms import ResourcePlanProjectForm
+        # form = ResourcePlanProjectForm(request.POST, instance=pp)
+        # if not form.is_valid():
+        #     return render(request, self.template_name, {
+        #         'plan': plan, 'pp': pp, 'form': form
+        #     })
+        # try:
+        #     cd = form.cleaned_data
+        #     PlanProjectService.update(pp.pk, {
+        #         'basis':               cd['basis'],
+        #         'custom_amount':       cd.get('custom_amount'),
+        #         'priority_override':   cd.get('priority_override', ''),
+        #         'confidence_override': cd.get('confidence_override', ''),
+        #         'dates_strict':        cd.get('dates_strict', False),
+        #         'notes':               cd.get('notes', ''),
+        #     })
+        #     messages.success(request, f'"{pp.project.display_name}" updated.')
+        #     return HttpResponseRedirect(
+        #         reverse('resource_plan:projects', args=[plan_pk])
+        #     )
+        # except ValidationError as exc:
+        #     _apply_errors(form, exc)
+        #     return render(request, self.template_name, {
+        #         'plan': plan, 'pp': pp, 'form': form
+        #     })
         plan = ResourcePlanService.get_plan(plan_pk)
         pp   = ResourcePlanProject.objects.select_related('project').get(pk=pp_pk, plan=plan)
         from .forms import ResourcePlanProjectForm
         form = ResourcePlanProjectForm(request.POST, instance=pp)
         if not form.is_valid():
+            from .forms import ResourcePlanSprintBudgetForm
+            from apps.sprints.models import Sprint
+            sprints_json = list(Sprint.objects.filter(
+                financial_year_id=plan.financial_year_id
+            ).order_by('start_date').values('pk', 'name'))
             return render(request, self.template_name, {
-                'plan': plan, 'pp': pp, 'form': form
+                'plan': plan, 'pp': pp, 'form': form,
+                'sprint_budget_form': ResourcePlanSprintBudgetForm(plan=plan),
+                'sprints_json': sprints_json,
             })
         try:
             cd = form.cleaned_data
@@ -583,9 +693,52 @@ class ResourcePlanPhaseEditView(View):
         ).get(pk=phase_pk)
         from .forms import ResourcePlanPhaseForm
         form = ResourcePlanPhaseForm(instance=phase, plan=plan)
+        # For cross-project dependency (item 12): pass all other plan projects
+        current_pp = phase.plan_project_team.plan_project
+        other_plan_projects = (
+            ResourcePlanProject.objects
+            .filter(plan=plan)
+            .exclude(pk=current_pp.pk)
+            .select_related('project')
+            .order_by('project__programme_name', 'project__project_name')
+        )
+        # Phase budget context (item 19)
+        ppt = phase.plan_project_team
+        team_allocated_days = ppt.allocated_days
+        # total_phase_days = sum(
+        #     float(ph.max_days_per_sprint or 0) *
+        #     max(1, ph.phases.count() if hasattr(ph, 'phases') else 1)
+        #     for ph in [ppt]
+        # )
+        # Simpler: sum existing phase max_days_per_sprint × sprint count
+        phase_budget_used = 0
+        # for ph in ppt.phases.all():
+        #     if ph.start_sprint and ph.end_sprint and ph.max_days_per_sprint:
+        #         from apps.sprints.models import Sprint
+        #         sprint_count = Sprint.objects.filter(
+        #             financial_year=plan.financial_year,
+        #             start_date__gte=ph.start_sprint.start_date,
+        #             end_date__lte=ph.end_sprint.end_date,
+        #         ).count()
+        #         phase_budget_used += float(ph.max_days_per_sprint) * sprint_count
+        from apps.sprints.models import Sprint as _Sprint
+        for ph in ppt.phases.all():
+            if ph.start_sprint and ph.end_sprint and ph.max_days_per_sprint:
+                sprint_count = _Sprint.objects.filter(
+                    financial_year=plan.financial_year,
+                    start_date__gte=ph.start_sprint.start_date,
+                    end_date__lte=ph.end_sprint.end_date,
+                ).count()
+                phase_budget_used += float(ph.max_days_per_sprint) * sprint_count
         return render(request, 'resource_plan/phase_form_modal.html', {
-            'plan': plan, 'phase': phase, 'form': form,
-            'is_create': False,
+            'plan':               plan,
+            'phase':              phase,
+            'form':               form,
+            'is_create':          False,
+            'other_plan_projects': other_plan_projects,
+            'team_allocated_days': team_allocated_days,
+            'phase_budget_used':   phase_budget_used,
+            'ppt':                 ppt,
         })
 
     def post(self, request, plan_pk, phase_pk):
@@ -696,9 +849,10 @@ class ResourcePlanAssignmentCreateView(View):
             cd = form.cleaned_data
             a  = PlanAssignmentService.create(int(phase_pk), {
                 'team_member_id':       cd['team_member'].pk if cd.get('team_member') else None,
-                'placeholder_name':     cd.get('placeholder_name', ''),
+                'placeholder_name':     '',
                 'assignment_type':      cd['assignment_type'],
-                'is_interim':           cd.get('is_interim', False),
+                'is_interim':           (cd.get('is_interim', False) or
+                                          cd.get('assignment_type') == 'INTERIM'),
                 'replaces_assignment_id': cd['replaces_assignment'].pk
                                           if cd.get('replaces_assignment') else None,
                 'pause_from_sprint_id': cd['pause_from_sprint'].pk
@@ -707,6 +861,8 @@ class ResourcePlanAssignmentCreateView(View):
                                         if cd.get('resume_at_sprint') else None,
                 'notes':                cd.get('notes', ''),
             })
+            # Process new gap rows submitted alongside the form
+            _save_gap_rows(request.POST, a)
             return JsonResponse({
                 'ok':           True,
                 'id':           a.pk,
@@ -757,9 +913,10 @@ class ResourcePlanAssignmentEditView(View):
             cd      = form.cleaned_data
             updated = PlanAssignmentService.update(assignment_pk, {
                 'team_member_id':       cd['team_member'].pk if cd.get('team_member') else None,
-                'placeholder_name':     cd.get('placeholder_name', ''),
+                'placeholder_name':     '',
                 'assignment_type':      cd['assignment_type'],
-                'is_interim':           cd.get('is_interim', False),
+                'is_interim':           (cd.get('is_interim', False) or
+                                          cd.get('assignment_type') == 'INTERIM'),
                 'replaces_assignment_id': cd['replaces_assignment'].pk
                                           if cd.get('replaces_assignment') else None,
                 'pause_from_sprint_id': cd['pause_from_sprint'].pk
@@ -768,6 +925,7 @@ class ResourcePlanAssignmentEditView(View):
                                         if cd.get('resume_at_sprint') else None,
                 'notes':                cd.get('notes', ''),
             })
+            _save_gap_rows(request.POST, updated)
             return JsonResponse({'ok': True, 'display_name': updated.display_name})
         except ValidationError as exc:
             msg = exc.message if hasattr(exc, 'message') else str(exc)
@@ -1081,29 +1239,152 @@ class ResourcePlanExportView(View):
             )
 
 # ═══════════════════════════════════════════════════════════
-#  Configure redesign — Team-add via modal AJAX (Bug 4 fix)
+#  Item 12 — Phases JSON endpoint for cross-project dependency
 # ═══════════════════════════════════════════════════════════
 
+class ResourcePlanProjectPhasesJsonView(View):
+    """
+    GET /resource-plan/<plan_pk>/projects/<pp_pk>/phases-json/
+    Returns JSON list of phases for a given plan-project.
+    Used by the phase-edit modal to populate the cross-project
+    phase dropdown when the user selects a different project.
+    """
+    def get(self, request, plan_pk, pp_pk):
+        try:
+            phases = ResourcePlanPhase.objects.filter(
+                plan_project_team__plan_project_id=pp_pk,
+                plan_project_team__plan_project__plan_id=plan_pk,
+            ).select_related(
+                'plan_project_team__team',
+            ).order_by('sequence_order', 'name')
+            data = [
+                {
+                    'pk':        p.pk,
+                    'name':      p.name,
+                    'team_name': p.plan_project_team.team.name,
+                }
+                for p in phases
+            ]
+            return JsonResponse({'ok': True, 'phases': data})
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Item 1 — Gap CRUD (create / delete per assignment)
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanGapCreateView(View):
+    """
+    POST /resource-plan/<plan_pk>/assignments/<assignment_pk>/gaps/add/
+    Body: { pause_from_sprint_id, resume_at_sprint_id, is_project_level, reason }
+    Returns JSON { ok, gap_id, pause_name, resume_name }
+    """
+    def post(self, request, plan_pk, assignment_pk):
+        import json
+        try:
+            from .models import ResourcePlanAssignmentGap
+            body              = json.loads(request.body)
+            pause_sprint_id   = body.get('pause_from_sprint_id')
+            resume_sprint_id  = body.get('resume_at_sprint_id')
+            is_project_level  = bool(body.get('is_project_level', False))
+            reason            = body.get('reason', '')
+
+            if not pause_sprint_id:
+                return JsonResponse({'ok': False, 'detail': 'Pause sprint is required.'}, status=400)
+
+            from apps.sprints.models import Sprint
+            pause_sprint  = Sprint.objects.get(pk=pause_sprint_id)
+            resume_sprint = Sprint.objects.get(pk=resume_sprint_id) if resume_sprint_id else None
+
+            if (resume_sprint and
+                    resume_sprint.start_date <= pause_sprint.start_date):
+                return JsonResponse(
+                    {'ok': False, 'detail': 'Resume sprint must be after pause sprint.'},
+                    status=400,
+                )
+
+            assignment = ResourcePlanAssignment.objects.get(
+                pk=assignment_pk,
+                phase__plan_project_team__plan_project__plan_id=plan_pk,
+            )
+            gap = ResourcePlanAssignmentGap.objects.create(
+                assignment        = assignment,
+                pause_from_sprint = pause_sprint,
+                resume_at_sprint  = resume_sprint,
+                is_project_level  = is_project_level,
+                reason            = reason,
+            )
+            return JsonResponse({
+                'ok':          True,
+                'gap_id':      gap.pk,
+                'pause_name':  pause_sprint.name,
+                'resume_name': resume_sprint.name if resume_sprint else '(open)',
+                'level':       'project' if is_project_level else 'engineer',
+                'reason':      reason,
+            })
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+class ResourcePlanGapDeleteView(View):
+    """
+    POST /resource-plan/<plan_pk>/gaps/<gap_pk>/delete/
+    Returns JSON { ok }
+    """
+    def post(self, request, plan_pk, gap_pk):
+        try:
+            from .models import ResourcePlanAssignmentGap
+            ResourcePlanAssignmentGap.objects.get(
+                pk=gap_pk,
+                assignment__phase__plan_project_team__plan_project__plan_id=plan_pk,
+            ).delete()
+            return JsonResponse({'ok': True})
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'detail': str(exc)}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Project detail view + Team-add modal (from configure fix)
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanProjectDetailView(View):
+    """GET /resource-plan/<plan_pk>/projects/<pp_pk>/"""
+    template_name = 'resource_plan/plan_project_detail.html'
+
+    def get(self, request, plan_pk, pp_pk):
+        plan = ResourcePlanService.get_plan(plan_pk)
+        pp   = (
+            ResourcePlanProject.objects
+            .select_related('project')
+            .prefetch_related(
+                'project_teams__team',
+                'project_teams__phases__assignments__team_member',
+                'project_teams__phases__assignments__gaps__pause_from_sprint',
+                'project_teams__phases__assignments__gaps__resume_at_sprint',
+                'sprint_budgets__sprint',
+            )
+            .get(pk=pp_pk, plan=plan)
+        )
+        from .forms import ResourcePlanSprintBudgetForm
+        return render(request, self.template_name, {
+            'plan':               plan,
+            'pp':                 pp,
+            'sprint_budget_form': ResourcePlanSprintBudgetForm(plan=plan),
+        })
+
+
 class ResourcePlanTeamAddView(View):
-    """
-    GET  /resource-plan/<plan_pk>/projects/<pp_pk>/team-form/
-         Returns HTML fragment for the team-add modal.
-    POST /resource-plan/<plan_pk>/projects/<pp_pk>/team-form/
-         Creates the team assignment. Returns JSON {ok, team_name, ppt_pk}.
-    """
+    """GET/POST /resource-plan/<plan_pk>/projects/<pp_pk>/team-form/"""
 
     def get(self, request, plan_pk, pp_pk):
         plan = ResourcePlanService.get_plan(plan_pk)
         pp   = ResourcePlanProject.objects.select_related('project').get(pk=pp_pk, plan=plan)
         from .forms import ResourcePlanProjectTeamForm
         form = ResourcePlanProjectTeamForm()
-        # Pre-calculate next sequence order
-        current_count = pp.project_teams.count()
-        form.fields['sequence_order'].initial = current_count + 1
+        form.fields['sequence_order'].initial = pp.project_teams.count() + 1
         return render(request, 'resource_plan/team_add_modal.html', {
-            'plan': plan,
-            'pp':   pp,
-            'form': form,
+            'plan': plan, 'pp': pp, 'form': form,
         })
 
     def post(self, request, plan_pk, pp_pk):
@@ -1132,34 +1413,3 @@ class ResourcePlanTeamAddView(View):
         except (ValidationError, Exception) as exc:
             msg = exc.message if hasattr(exc, 'message') else str(exc)
             return JsonResponse({'ok': False, 'detail': msg}, status=400)
-
-
-# ═══════════════════════════════════════════════════════════
-#  Project detail view (separate page per project)
-# ═══════════════════════════════════════════════════════════
-
-class ResourcePlanProjectDetailView(View):
-    """
-    GET /resource-plan/<plan_pk>/projects/<pp_pk>/
-    Full detail page for one configured project: teams, phases, assignments.
-    """
-    template_name = 'resource_plan/plan_project_detail.html'
-
-    def get(self, request, plan_pk, pp_pk):
-        plan = ResourcePlanService.get_plan(plan_pk)
-        pp   = (
-            ResourcePlanProject.objects
-            .select_related('project')
-            .prefetch_related(
-                'project_teams__team',
-                'project_teams__phases__assignments__team_member',
-                'sprint_budgets__sprint',
-            )
-            .get(pk=pp_pk, plan=plan)
-        )
-        from .forms import ResourcePlanSprintBudgetForm
-        return render(request, self.template_name, {
-            'plan':               plan,
-            'pp':                 pp,
-            'sprint_budget_form': ResourcePlanSprintBudgetForm(plan=plan),
-        })

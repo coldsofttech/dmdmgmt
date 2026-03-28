@@ -193,11 +193,8 @@ class ResourcePlanProject(models.Model):
             day_rate = 0.0
         if day_rate <= 0:
             return None
-        import math
         raw = float(amount) / day_rate
-        # Ceil to nearest 0.25: always round UP so no effort is under-estimated
-        ceiled = math.ceil(raw * 4) / 4
-        return Decimal(str(ceiled))
+        return Decimal(str(_round_to_quarter(raw)))
 
     def save(self, *args, **kwargs):
         self.days_required = self._compute_days_required()
@@ -622,6 +619,49 @@ class ResourcePlanCapacityOverride(models.Model):
             f'{self.reserved_days}d reserved'
         )
 
+
+
+class ResourcePlanAssignmentGap(models.Model):
+    """
+    One pause/resume window for a single assignment.
+    Supports multiple gaps per assignment (e.g. S2-S4 and S10-S12).
+    is_project_level=True means the gap applies to the whole project.
+    """
+    assignment = models.ForeignKey(
+        'ResourcePlanAssignment',
+        on_delete=models.CASCADE,
+        related_name='gaps',
+    )
+    pause_from_sprint = models.ForeignKey(
+        'sprints.Sprint',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='gap_pauses',
+    )
+    resume_at_sprint = models.ForeignKey(
+        'sprints.Sprint',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='gap_resumes',
+    )
+    is_project_level = models.BooleanField(
+        default=False,
+        help_text='When True, applies to all engineers on the project for this window.',
+    )
+    reason = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['pause_from_sprint__start_date']
+
+    def __str__(self):
+        lvl = 'project' if self.is_project_level else 'engineer'
+        return f'Gap {self.pause_from_sprint} -> {self.resume_at_sprint} ({lvl})'
+
+    def clean(self):
+        from django.core.exceptions import ValidationError as VE
+        if (self.pause_from_sprint and self.resume_at_sprint and
+                self.resume_at_sprint.start_date <= self.pause_from_sprint.start_date):
+            raise VE({'resume_at_sprint': 'Resume sprint must be after pause sprint.'})
 
 class ResourcePlanLeafPlaceholder(models.Model):
     """
