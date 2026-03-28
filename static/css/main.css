@@ -1490,6 +1490,59 @@ a:hover { text-decoration: underline; }
   margin-top:  2px;
   text-align:  center;
 }
+
+/* ── Basis amount display (green pill) ───────────────────── */
+.rp-basis-amount {
+  margin-top:    6px;
+  padding:       5px 10px;
+  background:    #f0fdf4;
+  border:        1px solid #bbf7d0;
+  border-radius: 6px;
+  color:         #15803d;
+  font-size:     12.5px;
+  display:       inline-flex;
+  align-items:   center;
+  gap:           4px;
+}
+ 
+/* ── Small accordion style for left panel ────────────────── */
+.rp-accordion-sm .accordion-button,
+.rp-accordion-btn-sm {
+  font-size:   12.5px;
+  padding:     7px 10px;
+  font-weight: 500;
+  color:       var(--color-text, #1e293b);
+}
+.rp-accordion-sm .accordion-button:not(.collapsed) {
+  background:  #f0f4ff;
+  color:       #4338ca;
+  box-shadow:  none;
+}
+.rp-accordion-sm .accordion-item {
+  border:        1px solid var(--color-border, #e2e8f0);
+  border-radius: 6px;
+  overflow:      hidden;
+}
+ 
+/* ── Definition list for project detail ─────────────────── */
+.rp-dl {
+  display:               grid;
+  grid-template-columns: 130px 1fr;
+  gap:                   6px 12px;
+  font-size:             13px;
+  margin:                0;
+}
+.rp-dl dt {
+  color:       var(--color-text-2, #64748b);
+  font-weight: 500;
+  padding-top: 2px;
+}
+.rp-dl dd {
+  margin:      0;
+}
+ 
+/* ── text-indigo helper (used inline) ────────────────────── */
+.text-indigo { color: #6366f1; }
  
  
 

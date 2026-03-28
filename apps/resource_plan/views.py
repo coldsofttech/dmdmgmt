@@ -174,7 +174,7 @@ class ResourcePlanConfigureView(View):
             'plan':               plan,
             'plan_projects':      plan_projects,
             'unmapped':           unmapped,
-            'add_project_form':   ResourcePlanProjectForm(),
+            'add_project_form':   ResourcePlanProjectForm(plan=plan),
             'add_team_form':      ResourcePlanProjectTeamForm(),
             'add_phase_form':     ResourcePlanPhaseForm(plan=plan),
             'sprint_budget_form': ResourcePlanSprintBudgetForm(plan=plan),
@@ -256,7 +256,7 @@ class ResourcePlanConfigureView(View):
                 'team_id':         cd['team'].pk,
                 'allocation_type': cd['allocation_type'],
                 'allocation_value': cd['allocation_value'],
-                'sequence_order':  cd['sequence_order'],
+                'sequence_order':  cd.get('sequence_order') or 1,
                 'notes':           cd.get('notes', ''),
             })
             messages.success(request, f'Team "{cd["team"].name}" assigned.')
@@ -1079,3 +1079,87 @@ class ResourcePlanExportView(View):
             return HttpResponseRedirect(
                 reverse('resource_plan:detail', args=[pk])
             )
+
+# ═══════════════════════════════════════════════════════════
+#  Configure redesign — Team-add via modal AJAX (Bug 4 fix)
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanTeamAddView(View):
+    """
+    GET  /resource-plan/<plan_pk>/projects/<pp_pk>/team-form/
+         Returns HTML fragment for the team-add modal.
+    POST /resource-plan/<plan_pk>/projects/<pp_pk>/team-form/
+         Creates the team assignment. Returns JSON {ok, team_name, ppt_pk}.
+    """
+
+    def get(self, request, plan_pk, pp_pk):
+        plan = ResourcePlanService.get_plan(plan_pk)
+        pp   = ResourcePlanProject.objects.select_related('project').get(pk=pp_pk, plan=plan)
+        from .forms import ResourcePlanProjectTeamForm
+        form = ResourcePlanProjectTeamForm()
+        # Pre-calculate next sequence order
+        current_count = pp.project_teams.count()
+        form.fields['sequence_order'].initial = current_count + 1
+        return render(request, 'resource_plan/team_add_modal.html', {
+            'plan': plan,
+            'pp':   pp,
+            'form': form,
+        })
+
+    def post(self, request, plan_pk, pp_pk):
+        plan = ResourcePlanService.get_plan(plan_pk)
+        pp   = ResourcePlanProject.objects.get(pk=pp_pk, plan=plan)
+        from .forms import ResourcePlanProjectTeamForm
+        form = ResourcePlanProjectTeamForm(request.POST)
+        if not form.is_valid():
+            return JsonResponse({'ok': False, 'errors': form.errors}, status=400)
+        try:
+            cd  = form.cleaned_data
+            ppt = PlanProjectTeamService.create(pp.pk, {
+                'team_id':         cd['team'].pk,
+                'allocation_type': cd['allocation_type'],
+                'allocation_value': cd['allocation_value'],
+                'sequence_order':  cd.get('sequence_order') or (pp.project_teams.count() + 1),
+                'notes':           cd.get('notes', ''),
+            })
+            return JsonResponse({
+                'ok':       True,
+                'ppt_pk':   ppt.pk,
+                'team_name': cd['team'].name,
+                'alloc':    f"{cd['allocation_value']}"
+                            f"{'%' if cd['allocation_type'] == 'PERCENT' else '£' if cd['allocation_type'] == 'BUDGET' else 'd'}",
+            })
+        except (ValidationError, Exception) as exc:
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return JsonResponse({'ok': False, 'detail': msg}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Project detail view (separate page per project)
+# ═══════════════════════════════════════════════════════════
+
+class ResourcePlanProjectDetailView(View):
+    """
+    GET /resource-plan/<plan_pk>/projects/<pp_pk>/
+    Full detail page for one configured project: teams, phases, assignments.
+    """
+    template_name = 'resource_plan/plan_project_detail.html'
+
+    def get(self, request, plan_pk, pp_pk):
+        plan = ResourcePlanService.get_plan(plan_pk)
+        pp   = (
+            ResourcePlanProject.objects
+            .select_related('project')
+            .prefetch_related(
+                'project_teams__team',
+                'project_teams__phases__assignments__team_member',
+                'sprint_budgets__sprint',
+            )
+            .get(pk=pp_pk, plan=plan)
+        )
+        from .forms import ResourcePlanSprintBudgetForm
+        return render(request, self.template_name, {
+            'plan':               plan,
+            'pp':                 pp,
+            'sprint_budget_form': ResourcePlanSprintBudgetForm(plan=plan),
+        })

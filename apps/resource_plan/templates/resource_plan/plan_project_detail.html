@@ -1,0 +1,651 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+  {{ pp.project.display_name }} — {{ plan.name }} — Demand Management
+{% endblock %}
+
+{% block page_header %}
+<div class="rp-page-header px-4 pt-4 pb-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'resource_plan:projects' plan.pk %}" class="btn btn-ghost-icon">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h1 class="rp-page-title">{{ pp.project.display_name }}</h1>
+      <p class="rp-page-subtitle">
+        {{ plan.name }}
+        <span class="rp-code ms-2">{{ plan.financial_year.short_fy }}</span>
+        <span class="text-secondary mx-2">·</span>
+        <span class="rp-badge rp-badge--muted" style="font-size:11px">
+          {{ pp.get_basis_display }}
+        </span>
+        {% if pp.days_required %}
+        <span class="rp-badge ms-1"
+              style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:11px">
+          {{ pp.days_required }}d required
+        </span>
+        {% endif %}
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'resource_plan:project_edit' plan.pk pp.pk %}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-pencil me-1"></i>Edit settings
+    </a>
+    <button class="btn btn-outline-danger btn-sm"
+            onclick="removeProject()">
+      <i class="bi bi-trash me-1"></i>Remove from plan
+    </button>
+    <a href="{% url 'resource_plan:configure' plan.pk %}"
+       class="btn btn-primary btn-sm">
+      <i class="bi bi-plus me-1"></i>Add another project
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  {# ── Left: Project settings summary ── #}
+  <div class="col-lg-4">
+    <div class="rp-card mb-3">
+      <h6 class="rp-card-heading">Project settings</h6>
+
+      <dl class="rp-dl">
+        <dt>Programme</dt>
+        <dd>{{ pp.project.programme_name|default:"—" }}</dd>
+
+        <dt>Project</dt>
+        <dd>
+          <a href="{% url 'projects:detail' pp.project.pk %}" class="rp-link">
+            {{ pp.project.project_name }}
+          </a>
+        </dd>
+
+        <dt>Basis</dt>
+        <dd>{{ pp.get_basis_display }}</dd>
+
+        {% if pp.basis == 'ESTIMATE' %}
+        <dt>Estimate value</dt>
+        <dd>{% if pp.project.total_cost %}£{{ pp.project.total_cost|floatformat:0 }}{% else %}—{% endif %}</dd>
+        {% elif pp.basis == 'BUDGET' %}
+        <dt>Budget (active)</dt>
+        <dd>
+          {% with budget=pp.project.budgets.first %}
+          {% if budget and budget.active_budget %}
+          £{{ budget.active_budget|floatformat:0 }}
+          {% else %}
+          <span class="text-secondary">Not set</span>
+          {% endif %}
+          {% endwith %}
+        </dd>
+        {% elif pp.basis == 'CUSTOM' %}
+        <dt>Custom amount</dt>
+        <dd>{% if pp.custom_amount %}£{{ pp.custom_amount|floatformat:0 }}{% else %}—{% endif %}</dd>
+        {% endif %}
+
+        <dt>Days required</dt>
+        <dd class="fw-500">{{ pp.days_required|default:"TBC" }}{% if pp.days_required %}d{% endif %}</dd>
+
+        <dt>Priority</dt>
+        <dd>
+          <span class="rp-badge-level rp-badge-level--{{ pp.effective_priority|lower }}">
+            {{ pp.effective_priority }}
+          </span>
+          {% if pp.priority_override %}
+          <span class="text-secondary ms-1" style="font-size:11px">(overridden)</span>
+          {% endif %}
+        </dd>
+
+        <dt>Confidence</dt>
+        <dd>
+          <span class="rp-badge-level rp-badge-level--{{ pp.effective_confidence|lower }}">
+            {{ pp.effective_confidence }}
+          </span>
+          {% if pp.confidence_override %}
+          <span class="text-secondary ms-1" style="font-size:11px">(overridden)</span>
+          {% endif %}
+        </dd>
+
+        <dt>Dates strict</dt>
+        <dd>
+          {% if pp.dates_strict %}
+          <span class="rp-badge"
+                style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11px">
+            <i class="bi bi-lock-fill me-1"></i>Strict — no right-shift
+          </span>
+          {% else %}
+          <span class="text-secondary" style="font-size:12.5px">Flexible</span>
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+
+    {# Sprint budget releases #}
+    <div class="rp-card mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="rp-card-heading mb-0">
+          <i class="bi bi-calendar2-week me-1 text-warning"></i>
+          Sprint budget releases
+        </h6>
+        <button class="btn btn-ghost-icon"
+                style="font-size:12px;height:auto;padding:2px 6px"
+                onclick="document.getElementById('add-sb-row').classList.toggle('d-none')"
+                title="Add">
+          <i class="bi bi-plus"></i>
+        </button>
+      </div>
+
+      {% if pp.sprint_budgets.exists %}
+      <div class="rp-table-wrap" style="box-shadow:none;border:none">
+        <table class="table rp-table mb-0" style="font-size:12.5px">
+          <thead>
+            <tr>
+              <th>Sprint</th>
+              <th class="text-end">Budget (£)</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sb in pp.sprint_budgets.all %}
+            <tr>
+              <td>{{ sb.sprint.name }}</td>
+              <td class="text-end fw-500">£{{ sb.budget_amount|floatformat:0 }}</td>
+              <td class="text-secondary">{{ sb.notes|default:"—" }}</td>
+              <td>
+                <form method="post"
+                      action="{% url 'resource_plan:configure' plan.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="_action" value="delete_sprint_budget">
+                  <input type="hidden" name="sprint_budget_pk" value="{{ sb.pk }}">
+                  <button type="submit"
+                          class="btn btn-ghost-icon btn-ghost-icon--danger"
+                          style="width:20px;height:20px;font-size:10px"
+                          title="Remove">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-secondary mb-0" style="font-size:12.5px">
+        No sprint budget releases configured.
+      </p>
+      {% endif %}
+
+      {# Add sprint budget inline #}
+      <form method="post" action="{% url 'resource_plan:configure' plan.pk %}"
+            id="add-sb-row" class="d-none mt-2">
+        {% csrf_token %}
+        <input type="hidden" name="_action" value="add_sprint_budget">
+        <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
+        <div class="d-flex gap-2 flex-wrap align-items-end">
+          <div>
+            <label class="rp-label" style="font-size:11.5px">Sprint</label>
+            <select name="{{ sprint_budget_form.sprint.html_name }}"
+                    class="form-select rp-select" style="max-width:160px;font-size:12.5px">
+              <option value="">— Select —</option>
+              {% for s in sprint_budget_form.fields.sprint.queryset %}
+              <option value="{{ s.pk }}">{{ s.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="rp-label" style="font-size:11.5px">Amount (£)</label>
+            <input type="number" step="0.01" min="0"
+                   name="{{ sprint_budget_form.budget_amount.html_name }}"
+                   class="form-control rp-input" style="max-width:110px;font-size:12.5px"
+                   placeholder="e.g. 20000" />
+          </div>
+          <div>
+            <label class="rp-label" style="font-size:11.5px">Notes</label>
+            <input type="text"
+                   name="{{ sprint_budget_form.notes.html_name }}"
+                   class="form-control rp-input" style="max-width:130px;font-size:12.5px"
+                   placeholder="Optional" />
+          </div>
+          <button type="submit" class="btn btn-sm btn-warning">
+            <i class="bi bi-check-lg me-1"></i>Add
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  onclick="document.getElementById('add-sb-row').classList.add('d-none')">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Right: Teams, phases, assignments ── #}
+  <div class="col-lg-8">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="fw-600 mb-0" style="font-size:14px">
+        <i class="bi bi-people me-2 text-primary"></i>Teams &amp; Phases
+      </h6>
+      <button class="btn btn-sm btn-outline-primary"
+              onclick="openTeamModal('{{ plan.pk }}', '{{ pp.pk }}',
+                '{{ pp.project.display_name|escapejs }}',
+                {{ pp.project_teams.count|add:1 }})">
+        <i class="bi bi-plus me-1"></i>Add team
+      </button>
+    </div>
+
+    {% for ppt in pp.project_teams.all %}
+    <div class="rp-card mb-3">
+
+      {# Team header #}
+      <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+        <div>
+          <h6 class="fw-600 mb-1" style="font-size:14px">
+            <i class="bi bi-people me-1 text-secondary"></i>
+            {{ ppt.team.name }}
+          </h6>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="rp-badge rp-badge--muted" style="font-size:11px">
+              Seq. {{ ppt.sequence_order }}
+            </span>
+            <span class="rp-badge rp-badge--muted" style="font-size:11px">
+              {{ ppt.allocation_value }}
+              {% if ppt.allocation_type == 'PERCENT' %}%
+              {% elif ppt.allocation_type == 'BUDGET' %}£
+              {% else %}d{% endif %}
+              {% if ppt.allocated_days %} = {{ ppt.allocated_days }}d{% endif %}
+            </span>
+            <span class="rp-badge rp-badge--muted" style="font-size:11px">
+              {{ ppt.get_allocation_type_display }}
+            </span>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary"
+                style="font-size:11.5px"
+                onclick="openPhaseModal('{{ plan.pk }}', '{{ ppt.pk }}', null)">
+          <i class="bi bi-plus me-1"></i>Add phase
+        </button>
+      </div>
+
+      {# Phases #}
+      {% for phase in ppt.phases.all %}
+      <div class="border rounded mb-3 p-3"
+           style="border-left:3px solid #6366f1 !important">
+
+        {# Phase header #}
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-2">
+          <div>
+            <span class="fw-600" style="font-size:13.5px">{{ phase.name }}</span>
+
+            {# Timeline #}
+            {% if phase.start_sprint and phase.end_sprint %}
+            <span class="text-secondary ms-2" style="font-size:12px">
+              <i class="bi bi-calendar3-range me-1"></i>
+              {{ phase.start_sprint.name }}
+              ({{ phase.start_sprint.month }})
+              → {{ phase.end_sprint.name }}
+              ({{ phase.end_sprint.month }})
+            </span>
+            {% else %}
+            <span class="ms-2" style="font-size:11.5px;color:#f59e0b">
+              <i class="bi bi-exclamation-circle me-1"></i>Dates not set
+            </span>
+            {% endif %}
+
+            {# Badges row #}
+            <div class="d-flex gap-1 flex-wrap mt-1">
+              <span class="rp-badge rp-badge--muted" style="font-size:10px"
+                    title="Allocation pattern">
+                <i class="bi bi-bar-chart me-1"></i>{{ phase.get_ramp_pattern_display }}
+              </span>
+              {% if phase.max_days_per_sprint %}
+              <span class="rp-badge rp-badge--muted" style="font-size:10px">
+                max {{ phase.max_days_per_sprint }}d/sprint
+              </span>
+              {% endif %}
+              {% if phase.predecessor_phase %}
+              <span class="rp-badge"
+                    style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:10px">
+                {{ phase.dependency_type }} ← {{ phase.predecessor_phase.name }}
+              </span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="d-flex gap-1">
+            <button class="btn btn-ghost-icon"
+                    style="width:26px;height:26px;font-size:11px"
+                    title="Edit phase"
+                    onclick="openPhaseModal('{{ plan.pk }}', null, '{{ phase.pk }}')">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-ghost-icon btn-ghost-icon--danger"
+                    style="width:26px;height:26px;font-size:11px"
+                    title="Delete phase"
+                    onclick="deletePhase('{{ plan.pk }}', '{{ phase.pk }}', '{{ phase.name|escapejs }}')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </div>
+
+        {# Engineers #}
+        <div class="mb-2" id="assignments-{{ phase.pk }}">
+          {% for a in phase.assignments.all %}
+          <div class="d-flex align-items-center gap-2 py-1 border-bottom assignment-row"
+               data-assignment="{{ a.pk }}" style="font-size:12.5px">
+            {% if a.assignment_type == 'ARCHITECT' %}
+            <i class="bi bi-award-fill text-warning" title="Architect"
+               style="font-size:10px"></i>
+            {% elif a.assignment_type == 'ADHOC' %}
+            <i class="bi bi-lightning-fill text-secondary" title="Adhoc"
+               style="font-size:10px"></i>
+            {% elif a.is_interim %}
+            <i class="bi bi-arrow-left-right text-info" title="Interim"
+               style="font-size:10px"></i>
+            {% else %}
+            <i class="bi bi-person-fill text-secondary" style="font-size:10px"></i>
+            {% endif %}
+            <span class="fw-500">{{ a.display_name }}</span>
+            <span class="rp-badge rp-badge--muted" style="font-size:10px">
+              {{ a.get_assignment_type_display }}
+            </span>
+            {% if a.pause_from_sprint %}
+            <span class="text-secondary" style="font-size:11px">
+              <i class="bi bi-pause-circle me-1"></i>
+              Paused {{ a.pause_from_sprint.name }}
+              {% if a.resume_at_sprint %}→ {{ a.resume_at_sprint.name }}{% endif %}
+            </span>
+            {% endif %}
+            <div class="ms-auto d-flex gap-1">
+              <button class="btn btn-ghost-icon"
+                      style="width:22px;height:22px;font-size:10px"
+                      onclick="editAssignment('{{ plan.pk }}', '{{ a.pk }}')">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-ghost-icon btn-ghost-icon--danger"
+                      style="width:22px;height:22px;font-size:10px"
+                      onclick="deleteAssignment('{{ plan.pk }}', '{{ a.pk }}', '{{ a.display_name|escapejs }}')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+          {% empty %}
+          <p class="text-secondary mb-1" style="font-size:12px">
+            No engineers assigned.
+          </p>
+          {% endfor %}
+        </div>
+        <button class="btn btn-ghost-icon"
+                style="font-size:12px;height:auto;padding:3px 8px;color:#6366f1"
+                onclick="addAssignment('{{ plan.pk }}', '{{ phase.pk }}')">
+          <i class="bi bi-person-plus me-1"></i>Assign engineer
+        </button>
+      </div>
+      {% empty %}
+      <p class="text-secondary" style="font-size:12.5px">
+        No phases yet.
+        <button class="btn btn-ghost-icon"
+                style="font-size:12px;height:auto;padding:0 4px;color:#6366f1"
+                onclick="openPhaseModal('{{ plan.pk }}', '{{ ppt.pk }}', null)">
+          Add a phase
+        </button>
+      </p>
+      {% endfor %}
+    </div>
+    {% empty %}
+    <div class="rp-card text-center py-4 text-secondary">
+      <i class="bi bi-people display-6 d-block mb-2 opacity-25"></i>
+      No teams assigned yet.
+      <button class="btn btn-primary btn-sm mt-2"
+              onclick="openTeamModal('{{ plan.pk }}', '{{ pp.pk }}',
+                '{{ pp.project.display_name|escapejs }}', 1)">
+        <i class="bi bi-plus me-1"></i>Add team
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# Remove confirmation modal #}
+<div class="modal fade" id="removeModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Remove from plan?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-0" style="font-size:13px">
+          <strong>{{ pp.project.display_name }}</strong> and all its team
+          assignments, phases, and cells will be removed from this plan.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Cancel</button>
+        <form method="post" action="{% url 'resource_plan:configure' plan.pk %}"
+              class="d-inline">
+          {% csrf_token %}
+          <input type="hidden" name="_action" value="remove_project">
+          <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
+          <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Team modal #}
+<div class="modal fade" id="teamModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:500px">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <div>
+          <h5 class="modal-title">Assign team</h5>
+          <p class="text-secondary mb-0" style="font-size:12.5px">
+            {{ pp.project.display_name }}
+          </p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="teamModalBody">
+        <div class="text-center py-3">
+          <span class="spinner-border spinner-border-sm"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Phase modal #}
+<div class="modal fade" id="phaseModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:580px">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title" id="phaseModalTitle">Phase</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="phaseModalBody">
+        <div class="text-center py-3">
+          <span class="spinner-border spinner-border-sm"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Assignment modal #}
+<div class="modal fade" id="assignmentModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:520px">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title" id="assignmentModalTitle">Assign engineer</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="assignmentModalBody">
+        <div class="text-center py-3">
+          <span class="spinner-border spinner-border-sm"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const _planPk = {{ plan.pk }};
+const _csrf   = '{{ csrf_token }}';
+
+function removeProject() {
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('removeModal')).show();
+}
+
+async function openTeamModal(planPk, ppPk, projectName, nextSeq) {
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('teamModal'));
+  const body  = document.getElementById('teamModalBody');
+  body.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div>';
+  modal.show();
+  const res  = await fetch(`/resource-plan/${planPk}/projects/${ppPk}/team-form/`);
+  const html = await res.text();
+  body.innerHTML = html;
+  document.getElementById('save-team-btn')?.addEventListener('click', async () => {
+    const form  = document.getElementById('team-add-form');
+    const errEl = document.getElementById('team-add-error');
+    const res   = await fetch(`/resource-plan/${planPk}/projects/${ppPk}/team-form/`, {
+      method: 'POST', headers: { 'X-CSRFToken': _csrf }, body: new FormData(form),
+    });
+    const data = await res.json();
+    if (data.ok) { modal.hide(); location.reload(); }
+    else {
+      errEl.textContent = data.detail || Object.values(data.errors || {}).flat().join(' ');
+      errEl.classList.remove('d-none');
+    }
+  });
+}
+
+async function openPhaseModal(planPk, pptPk, phasePk) {
+  const modal   = bootstrap.Modal.getOrCreateInstance(document.getElementById('phaseModal'));
+  const titleEl = document.getElementById('phaseModalTitle');
+  const bodyEl  = document.getElementById('phaseModalBody');
+  titleEl.textContent = phasePk ? 'Edit phase' : 'Add phase';
+  bodyEl.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div>';
+  modal.show();
+  if (phasePk) {
+    const res = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/edit/`);
+    bodyEl.innerHTML = await res.text();
+    document.getElementById('save-phase-edit-btn')?.addEventListener('click', async () => {
+      const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/edit/`, {
+        method: 'POST', headers: { 'X-CSRFToken': _csrf },
+        body: new FormData(document.getElementById('phase-edit-form')),
+      });
+      const data = await res.json();
+      if (data.ok) { modal.hide(); location.reload(); }
+      else {
+        const e = document.getElementById('phase-edit-error');
+        if (e) { e.textContent = data.detail || 'Save failed.'; e.classList.remove('d-none'); }
+      }
+    });
+  } else {
+    bodyEl.innerHTML = `
+      <div class="row g-2 mb-3">
+        <div class="col-8"><label class="rp-label">Name *</label>
+          <input type="text" id="new-phase-name" class="form-control rp-input" value="Phase 1"/></div>
+        <div class="col-4"><label class="rp-label">Order</label>
+          <input type="number" id="new-phase-order" min="1" value="1" class="form-control rp-input"/></div>
+      </div>
+      <p class="rp-hint mb-3">Edit the phase afterwards to set sprint dates, ramp, dependencies.</p>
+      <div id="phase-error" class="alert alert-danger py-2 d-none" style="font-size:12.5px"></div>
+      <div class="d-flex gap-2">
+        <button type="button" id="save-phase-btn" class="btn btn-sm btn-primary">Add phase</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>`;
+    document.getElementById('save-phase-btn')?.addEventListener('click', async () => {
+      const name  = document.getElementById('new-phase-name')?.value?.trim();
+      const order = document.getElementById('new-phase-order')?.value || '1';
+      const errEl = document.getElementById('phase-error');
+      if (!name) { errEl.textContent='Name required'; errEl.classList.remove('d-none'); return; }
+      const body = new URLSearchParams({
+        _action:'add_phase', plan_project_team_pk: pptPk,
+        csrfmiddlewaretoken: _csrf, name, sequence_order:order, ramp_pattern:'FLAT',
+      });
+      const res = await fetch(`/resource-plan/${planPk}/configure/`, {
+        method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body: body.toString(),
+      });
+      if (res.ok || res.redirected) { modal.hide(); location.reload(); }
+      else { errEl.textContent='Save failed.'; errEl.classList.remove('d-none'); }
+    });
+  }
+}
+
+async function deletePhase(planPk, phasePk, name) {
+  if (!confirm(`Delete phase "${name}"?`)) return;
+  const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/delete/`, {
+    method:'POST', headers:{'X-CSRFToken':_csrf}
+  });
+  const data = await res.json();
+  if (data.ok) location.reload(); else alert(data.detail || 'Delete failed.');
+}
+
+async function addAssignment(planPk, phasePk) {
+  const modal   = bootstrap.Modal.getOrCreateInstance(document.getElementById('assignmentModal'));
+  const bodyEl  = document.getElementById('assignmentModalBody');
+  document.getElementById('assignmentModalTitle').textContent = 'Assign engineer';
+  bodyEl.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div>';
+  modal.show();
+  const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/assignments/new/`);
+  bodyEl.innerHTML = await res.text();
+  document.getElementById('save-assignment-btn')?.addEventListener('click', async () => {
+    const form = document.getElementById('assignment-form');
+    const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/assignments/new/`, {
+      method:'POST', headers:{'X-CSRFToken':_csrf}, body: new FormData(form),
+    });
+    const data = await res.json();
+    if (data.ok) { modal.hide(); location.reload(); }
+    else {
+      const e = document.getElementById('assignment-error');
+      if (e) { e.textContent=data.detail||'Check form.'; e.classList.remove('d-none'); }
+    }
+  });
+}
+
+async function editAssignment(planPk, assignmentPk) {
+  const modal   = bootstrap.Modal.getOrCreateInstance(document.getElementById('assignmentModal'));
+  const bodyEl  = document.getElementById('assignmentModalBody');
+  document.getElementById('assignmentModalTitle').textContent = 'Edit assignment';
+  bodyEl.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div>';
+  modal.show();
+  const res  = await fetch(`/resource-plan/${planPk}/assignments/${assignmentPk}/edit/`);
+  bodyEl.innerHTML = await res.text();
+  document.getElementById('save-assignment-btn')?.addEventListener('click', async () => {
+    const form = document.getElementById('assignment-form');
+    const res  = await fetch(`/resource-plan/${planPk}/assignments/${assignmentPk}/edit/`, {
+      method:'POST', headers:{'X-CSRFToken':_csrf}, body: new FormData(form),
+    });
+    const data = await res.json();
+    if (data.ok) { modal.hide(); location.reload(); }
+    else {
+      const e = document.getElementById('assignment-error');
+      if (e) { e.textContent=data.detail||'Check form.'; e.classList.remove('d-none'); }
+    }
+  });
+}
+
+async function deleteAssignment(planPk, assignmentPk, name) {
+  if (!confirm(`Remove "${name}"?`)) return;
+  const res  = await fetch(`/resource-plan/${planPk}/assignments/${assignmentPk}/delete/`, {
+    method:'POST', headers:{'X-CSRFToken':_csrf}
+  });
+  const data = await res.json();
+  if (data.ok)
+    document.querySelector(`.assignment-row[data-assignment="${assignmentPk}"]`)?.remove();
+  else alert(data.detail || 'Delete failed.');
+}
+</script>
+{% endblock %}

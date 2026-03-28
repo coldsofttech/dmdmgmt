@@ -12,7 +12,7 @@
     <div>
       <h1 class="rp-page-title">Configure — {{ plan.name }}</h1>
       <p class="rp-page-subtitle">
-        Scope projects · Assign teams · Define phases · Map engineers
+        Add projects · Assign teams · Define timelines
         <span class="rp-code ms-2">{{ plan.financial_year.short_fy }}</span>
       </p>
     </div>
@@ -35,21 +35,34 @@
 {% endblock %}
 
 {% block content %}
-<div class="row g-4">
 
-  <!-- ── Left: Add project form ── -->
-  <div class="col-lg-4">
-    <div class="rp-card mb-3">
-      <h6 class="rp-card-heading">
-        <i class="bi bi-plus-circle me-1 text-primary"></i>Add project to plan
+{% with budget_map=add_project_form.project_budget_map %}
+<script>
+window._budgetMap = {
+  {% for pk, amt in budget_map.items %}
+  "{{ pk }}": {{ amt }}{% if not forloop.last %},{% endif %}
+  {% endfor %}
+};
+window._planPk = {{ plan.pk }};
+window._csrf   = '{{ csrf_token }}';
+</script>
+{% endwith %}
+
+<div class="row g-4">
+  <div class="col-lg-5 col-xl-4">
+    <div class="rp-card">
+      <h6 class="rp-card-heading mb-3">
+        <i class="bi bi-plus-circle me-2 text-primary"></i>Add project to plan
       </h6>
-      <form method="post" novalidate>
+
+      <form method="post" novalidate id="add-project-form">
         {% csrf_token %}
         <input type="hidden" name="_action" value="add_project">
 
-        <!-- Project select — shows £ value on change (2.1) -->
         <div class="rp-field mb-3">
-          <label class="rp-label">Project <span class="rp-required">*</span></label>
+          <label class="rp-label">
+            Project <span class="rp-required">*</span>
+          </label>
           <select name="{{ add_project_form.project.html_name }}"
                   id="project-select"
                   class="form-select rp-select {% if add_project_form.project.errors %}is-invalid{% endif %}"
@@ -58,8 +71,8 @@
             {% for p in add_project_form.fields.project.queryset %}
             <option value="{{ p.pk }}"
                     data-estimate="{{ p.total_cost|default:'' }}"
-                    data-name="{% if p.programme_name %}{{ p.programme_name }}: {% endif %}{{ p.project_name }}">
-              {% if p.programme_name %}{{ p.programme_name }}: {% endif %}{{ p.project_name }}
+                    data-name="{{ p.display_name|escapejs }}">
+              {{ p.display_name }}
             </option>
             {% endfor %}
           </select>
@@ -68,68 +81,186 @@
           {% endif %}
         </div>
 
-        <!-- Basis + £ value display (2.1) -->
-        <div class="rp-field mb-3">
-          <label class="rp-label">Basis <span class="rp-required">*</span></label>
+        <div class="rp-field mb-2">
+          <label class="rp-label">
+            Basis for days calculation <span class="rp-required">*</span>
+          </label>
           <select name="{{ add_project_form.basis.html_name }}"
-                  class="form-select rp-select" onchange="onBasisChange(this)">
+                  id="basis-select"
+                  class="form-select rp-select"
+                  onchange="onBasisChange(this)">
             {% for val, label in add_project_form.fields.basis.choices %}
             <option value="{{ val }}">{{ label }}</option>
             {% endfor %}
           </select>
-          <!-- Live £ value display -->
-          <div id="basis-amount-display" class="mt-1 d-none"
-               style="font-size:12.5px;padding:4px 10px;background:#f0fdf4;border:1px solid #bbf7d0;
-                      border-radius:6px;color:#15803d">
+          <div id="basis-amount-display" class="rp-basis-amount d-none">
             <i class="bi bi-cash me-1"></i>
-            <span id="basis-amount-value">—</span>
-            <span class="text-secondary ms-1" id="basis-amount-label"></span>
+            <span id="basis-amount-value"></span>
+            <span class="ms-1 text-secondary" id="basis-amount-label"
+                  style="font-size:11px"></span>
           </div>
         </div>
 
-        <div class="rp-field mb-3 d-none" id="custom-amount-field">
-          <label class="rp-label">Custom amount (£) <span class="rp-required">*</span></label>
+        <div id="custom-amount-field" class="rp-field mb-3 d-none">
+          <label class="rp-label">
+            Custom amount (£) <span class="rp-required">*</span>
+          </label>
           <input type="number" step="0.01" min="0"
                  name="{{ add_project_form.custom_amount.html_name }}"
                  id="custom-amount-input"
-                 class="form-control rp-input" placeholder="e.g. 50000"
-                 oninput="showCustomAmount(this.value)" />
+                 class="form-control rp-input"
+                 placeholder="e.g. 50000"
+                 oninput="onCustomAmountInput(this.value)" />
         </div>
 
-        <div class="row g-2 mb-3">
-          <div class="col-6">
-            <label class="rp-label">Priority override</label>
-            <select name="{{ add_project_form.priority_override.html_name }}"
-                    class="form-select rp-select">
-              <option value="">— Inherit —</option>
-              {% for val, label in add_project_form.fields.priority_override.choices %}
-              {% if val %}<option value="{{ val }}">{{ label }}</option>{% endif %}
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-6">
-            <label class="rp-label">Confidence override</label>
-            <select name="{{ add_project_form.confidence_override.html_name }}"
-                    class="form-select rp-select">
-              <option value="">— Inherit —</option>
-              {% for val, label in add_project_form.fields.confidence_override.choices %}
-              {% if val %}<option value="{{ val }}">{{ label }}</option>{% endif %}
-              {% endfor %}
-            </select>
+        <div class="accordion mb-3" id="sprintBudgetAccordion">
+          <div class="accordion-item rp-accordion-sm">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed rp-accordion-btn-sm" type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#sprintBudgetCollapse">
+                <i class="bi bi-calendar2-week me-2 text-warning"></i>
+                Per-Sprint Budget Release
+                <span class="rp-hint ms-2">(optional)</span>
+              </button>
+            </h2>
+            <div id="sprintBudgetCollapse" class="accordion-collapse collapse">
+              <div class="accordion-body p-2">
+                <p class="rp-hint mb-2">
+                  Add budget caps per sprint — the engine won't allocate beyond
+                  this amount for a given sprint.
+                </p>
+                <div id="sprint-budget-rows"></div>
+                <button type="button" class="btn btn-ghost-icon mt-1"
+                        style="font-size:12px;color:#6366f1"
+                        onclick="addSprintBudgetRow()">
+                  <i class="bi bi-plus me-1"></i>Add sprint budget
+                </button>
+                <p class="rp-hint mt-2">
+                  These are saved after the project is added — edit via the
+                  project detail screen.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="rp-field mb-3">
-          <div class="form-check">
-            <input type="checkbox" name="{{ add_project_form.dates_strict.html_name }}"
-                   id="id_dates_strict" class="form-check-input" />
-            <label class="form-check-label rp-label" for="id_dates_strict">
-              Dates are strict — do not right-shift
-            </label>
+        <div class="accordion mb-3">
+          <div class="accordion-item rp-accordion-sm">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed rp-accordion-btn-sm" type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#timelinesCollapse">
+                <i class="bi bi-calendar3-range me-2 text-indigo"></i>
+                Tentative Timelines
+                <span class="rp-hint ms-2">(optional)</span>
+              </button>
+            </h2>
+            <div id="timelinesCollapse" class="accordion-collapse collapse">
+              <div class="accordion-body p-2">
+                <p class="rp-hint mb-2">
+                  Set project-level tentative start/end sprint. Phases override
+                  these per-team. Leave blank to let the engine place freely.
+                </p>
+                <div class="row g-2 mb-2">
+                  <div class="col-6">
+                    <label class="rp-label" style="font-size:11.5px">
+                      Start sprint
+                    </label>
+                    <select id="tentative-start-sprint" class="form-select rp-select"
+                            style="font-size:12.5px"
+                            onchange="showSprintMonth('start', this)">
+                      <option value="">— Any —</option>
+                      {% for s in sprint_budget_form.fields.sprint.queryset %}
+                      <option value="{{ s.pk }}"
+                              data-month="{{ s.month }}">
+                        {{ s.name }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                    <div id="start-sprint-month" class="rp-hint mt-1 d-none"
+                         style="font-size:11px;color:#6366f1">
+                      <i class="bi bi-calendar3 me-1"></i>
+                      <span></span>
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <label class="rp-label" style="font-size:11.5px">
+                      End sprint
+                    </label>
+                    <select id="tentative-end-sprint" class="form-select rp-select"
+                            style="font-size:12.5px"
+                            onchange="showSprintMonth('end', this)">
+                      <option value="">— Any —</option>
+                      {% for s in sprint_budget_form.fields.sprint.queryset %}
+                      <option value="{{ s.pk }}"
+                              data-month="{{ s.month }}">
+                        {{ s.name }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                    <div id="end-sprint-month" class="rp-hint mt-1 d-none"
+                         style="font-size:11px;color:#6366f1">
+                      <i class="bi bi-calendar3 me-1"></i>
+                      <span></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="form-check mt-1">
+                  <input type="checkbox"
+                         name="{{ add_project_form.dates_strict.html_name }}"
+                         id="id_dates_strict"
+                         class="form-check-input" />
+                  <label class="form-check-label rp-label" for="id_dates_strict"
+                         style="font-size:12px">
+                    Dates are strict — do not right-shift
+                  </label>
+                </div>
+                <p class="rp-hint mt-1">
+                  When strict, the engine never pushes this project's phases
+                  right even under capacity pressure.
+                </p>
+              </div>
+            </div>
           </div>
-          <p class="rp-hint mt-1">
-            When unchecked, the engine may push delivery to the right if capacity is unavailable.
-          </p>
+        </div>
+
+        <div class="accordion mb-3">
+          <div class="accordion-item rp-accordion-sm">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed rp-accordion-btn-sm" type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#overridesCollapse">
+                <i class="bi bi-sliders me-2 text-secondary"></i>
+                Priority &amp; Confidence Override
+                <span class="rp-hint ms-2">(optional)</span>
+              </button>
+            </h2>
+            <div id="overridesCollapse" class="accordion-collapse collapse">
+              <div class="accordion-body p-2">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="rp-label" style="font-size:11.5px">Priority</label>
+                    <select name="{{ add_project_form.priority_override.html_name }}"
+                            class="form-select rp-select" style="font-size:12.5px">
+                      {% for val, label in add_project_form.fields.priority_override.choices %}
+                      <option value="{{ val }}">{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-6">
+                    <label class="rp-label" style="font-size:11.5px">Confidence</label>
+                    <select name="{{ add_project_form.confidence_override.html_name }}"
+                            class="form-select rp-select" style="font-size:12.5px">
+                      {% for val, label in add_project_form.fields.confidence_override.choices %}
+                      <option value="{{ val }}">{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {% if add_project_form.non_field_errors %}
@@ -138,437 +269,187 @@
         </div>
         {% endif %}
 
-        <button type="submit" class="btn btn-sm btn-primary w-100">
-          <i class="bi bi-plus me-1"></i>Add project
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="bi bi-plus me-1"></i>Add project to plan
         </button>
       </form>
     </div>
+  </div>
 
-    <!-- Unmapped projects by programme (2.8) -->
+  <div class="col-lg-7 col-xl-8">
+
     {% if unmapped %}
-    <div class="rp-card rp-card--muted">
-      <h6 class="fw-500 mb-2" style="font-size:13px">
-        <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
-        {{ unmapped|length }} project{{ unmapped|length|pluralize }} not in this plan
-      </h6>
+    <div class="rp-card rp-card--muted mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-500 mb-0" style="font-size:13px">
+          <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+          {{ unmapped|length }} active project{{ unmapped|length|pluralize }}
+          not yet in this plan
+        </h6>
+        <a href="{% url 'resource_plan:projects' plan.pk %}"
+           class="btn btn-outline-secondary btn-sm" style="font-size:12px">
+          View configured →
+        </a>
+      </div>
+
       {% regroup unmapped by programme_name as unmapped_programmes %}
       <div class="accordion accordion-flush" id="unmappedAccordion">
         {% for programme_group in unmapped_programmes %}
         <div class="accordion-item" style="background:transparent;border:none">
-          <button class="accordion-button collapsed py-2 px-0"
-                  style="background:transparent;font-size:12.5px;font-weight:500;box-shadow:none"
+          <button class="accordion-button collapsed py-2 px-0 rp-accordion-btn-sm"
+                  style="background:transparent;box-shadow:none"
                   data-bs-toggle="collapse"
                   data-bs-target="#uprog-{{ forloop.counter }}">
-            <i class="bi bi-folder2 me-2 text-secondary"></i>
-            {{ programme_group.grouper|default:"(No Programme)" }}
+            <i class="bi bi-folder2 me-2 text-secondary"
+               style="font-size:12px"></i>
+            <span style="font-size:12.5px;font-weight:500">
+              {{ programme_group.grouper|default:"(No Programme)" }}
+            </span>
             <span class="rp-badge rp-badge--muted ms-2" style="font-size:10px">
               {{ programme_group.list|length }}
             </span>
           </button>
-          <div id="uprog-{{ forloop.counter }}" class="accordion-collapse collapse">
-            <ul class="list-unstyled ps-3 mb-2">
+          <div id="uprog-{{ forloop.counter }}"
+               class="accordion-collapse collapse">
+            <div class="ps-4">
               {% for p in programme_group.list %}
-              <li class="d-flex justify-content-between align-items-center py-1"
-                  style="font-size:12px;border-bottom:1px solid var(--color-border,#e2e8f0)">
+              <div class="d-flex justify-content-between align-items-center py-1"
+                   style="font-size:12px;border-bottom:1px solid var(--color-border,#e2e8f0)">
                 <span class="text-secondary">{{ p.project_name }}</span>
-                <span class="rp-badge-status rp-badge-status--{{ p.status|lower }}"
-                      style="font-size:10px">{{ p.get_status_display }}</span>
-              </li>
+                <div class="d-flex align-items-center gap-2">
+                  {% if p.total_cost %}
+                  <span class="text-secondary" style="font-size:11px">
+                    £{{ p.total_cost|floatformat:0 }}
+                  </span>
+                  {% endif %}
+                  <span class="rp-badge-status rp-badge-status--{{ p.status|lower }}"
+                        style="font-size:10px">
+                    {{ p.get_status_display }}
+                  </span>
+                </div>
+              </div>
               {% endfor %}
-            </ul>
+            </div>
           </div>
         </div>
         {% endfor %}
       </div>
     </div>
     {% endif %}
-  </div>
 
-  <!-- ── Right: Scoped projects ── -->
-  <div class="col-lg-8">
     {% if plan_projects %}
-    {% for pp in plan_projects %}
-    <div class="rp-card mb-4" id="pp-{{ pp.pk }}">
+    <div class="rp-card mb-3"
+         style="background:#f8faff;border-color:#c7d2fe">
+      <div class="d-flex justify-content-between align-items-center">
+        <span style="font-size:13px;color:#4338ca;font-weight:500">
+          <i class="bi bi-kanban-fill me-2"></i>
+          {{ plan_projects|length }}
+          project{{ plan_projects|length|pluralize }} configured in this plan
+        </span>
+        <a href="{% url 'resource_plan:projects' plan.pk %}"
+           class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-table me-1"></i>View &amp; manage all →
+        </a>
+      </div>
+    </div>
 
-      <!-- Project header -->
-      <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+    {% for pp in plan_projects|slice:":3" %}
+    <div class="rp-card mb-2 py-2 px-3"
+         style="border-left:3px solid #6366f1">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
-          <h5 class="fw-600 mb-1" style="font-size:15px">
-            <a href="{% url 'projects:detail' pp.project.pk %}" class="rp-link">
-              {{ pp.project.display_name }}
-            </a>
-          </h5>
-          <div class="d-flex gap-2 flex-wrap align-items-center">
-            <span class="rp-badge rp-badge--muted" style="font-size:11px">
+          <a href="{% url 'resource_plan:project_edit' plan.pk pp.pk %}"
+             class="fw-500 rp-link" style="font-size:13.5px">
+            {{ pp.project.display_name }}
+          </a>
+          <div class="d-flex gap-2 flex-wrap mt-1">
+            <span class="rp-badge rp-badge--muted" style="font-size:10px">
               {{ pp.get_basis_display }}
             </span>
-            <!-- £ amount for this basis (2.1) -->
-            {% if pp.basis == 'ESTIMATE' and pp.project.total_cost %}
-            <span class="rp-badge" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-size:11px">
-              <i class="bi bi-cash me-1"></i>Est. £{{ pp.project.total_cost|floatformat:0 }}
-            </span>
-            {% elif pp.basis == 'BUDGET' %}
-            {% with budget=pp.project.budgets.first %}
-            {% if budget and budget.active_budget %}
-            <span class="rp-badge" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-size:11px">
-              <i class="bi bi-cash me-1"></i>Budget £{{ budget.active_budget|floatformat:0 }}
-            </span>
-            {% endif %}
-            {% endwith %}
-            {% elif pp.basis == 'CUSTOM' and pp.custom_amount %}
-            <span class="rp-badge" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;font-size:11px">
-              <i class="bi bi-cash me-1"></i>Custom £{{ pp.custom_amount|floatformat:0 }}
-            </span>
-            {% endif %}
             {% if pp.days_required %}
-            <span class="rp-badge" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:11px">
-              {{ pp.days_required }}d required
+            <span class="rp-badge"
+                  style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:10px">
+              {{ pp.days_required }}d
             </span>
-            {% else %}
-            <span class="rp-badge rp-badge--muted" style="font-size:11px">Days TBC</span>
             {% endif %}
             <span class="rp-badge-level rp-badge-level--{{ pp.effective_priority|lower }}"
-                  style="font-size:11px">{{ pp.effective_priority }}</span>
-            {% if pp.dates_strict %}
-            <span class="rp-badge" style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11px">
-              <i class="bi bi-lock-fill me-1"></i>Strict
+                  style="font-size:10px">
+              {{ pp.effective_priority }}
             </span>
-            {% endif %}
+            <span class="text-secondary" style="font-size:11px">
+              {{ pp.project_teams.count }} team{{ pp.project_teams.count|pluralize }}
+            </span>
           </div>
         </div>
         <div class="d-flex gap-1">
+          <button class="btn btn-ghost-icon"
+                  style="width:26px;height:26px;font-size:11px"
+                  title="Assign team"
+                  onclick="openTeamModal('{{ plan.pk }}', '{{ pp.pk }}',
+                    '{{ pp.project.display_name|escapejs }}',
+                    {{ pp.project_teams.count|add:1 }})">
+            <i class="bi bi-people-fill text-primary"></i>
+          </button>
           <a href="{% url 'resource_plan:project_edit' plan.pk pp.pk %}"
-             class="btn btn-ghost-icon" title="Edit project settings"
-             style="width:28px;height:28px;font-size:12px">
+             class="btn btn-ghost-icon"
+             style="width:26px;height:26px;font-size:11px"
+             title="Edit">
             <i class="bi bi-pencil"></i>
           </a>
           <form method="post" class="d-inline">
             {% csrf_token %}
             <input type="hidden" name="_action" value="remove_project">
             <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
-            <button type="submit" class="btn btn-ghost-icon btn-ghost-icon--danger"
-                    title="Remove from plan" style="width:28px;height:28px;font-size:12px">
+            <button type="submit"
+                    class="btn btn-ghost-icon btn-ghost-icon--danger"
+                    style="width:26px;height:26px;font-size:11px"
+                    title="Remove">
               <i class="bi bi-trash"></i>
             </button>
           </form>
         </div>
       </div>
-
-      <!-- ── Sprint budget releases (2.7) ── -->
-      {% if pp.sprint_budgets.exists %}
-      <div class="mb-3 p-2 rounded" style="background:#fffbeb;border:1px solid #fde68a">
-        <div class="d-flex justify-content-between align-items-center mb-1">
-          <span class="fw-500" style="font-size:12.5px">
-            <i class="bi bi-calendar2-week me-1 text-warning"></i>
-            Sprint budget releases
-          </span>
-          <button class="btn btn-ghost-icon" style="font-size:11px;height:auto;padding:2px 6px"
-                  onclick="toggleSprintBudgetForm('{{ pp.pk }}')" title="Add/edit sprint budget">
-            <i class="bi bi-plus"></i>
-          </button>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-          {% for sb in pp.sprint_budgets.all %}
-          <div class="d-flex align-items-center gap-1"
-               style="font-size:12px;background:#fff;border:1px solid #fde68a;border-radius:6px;padding:2px 8px">
-            <span>{{ sb.sprint.name }}: £{{ sb.budget_amount|floatformat:0 }}</span>
-            <form method="post" class="d-inline">
-              {% csrf_token %}
-              <input type="hidden" name="_action" value="delete_sprint_budget">
-              <input type="hidden" name="sprint_budget_pk" value="{{ sb.pk }}">
-              <button type="submit" class="btn btn-ghost-icon btn-ghost-icon--danger"
-                      style="width:16px;height:16px;font-size:10px;padding:0"
-                      title="Remove">
-                <i class="bi bi-x"></i>
-              </button>
-            </form>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-      <!-- Sprint budget add form (collapsed by default) -->
-      <div id="sprint-budget-form-{{ pp.pk }}" class="mb-3 d-none">
-        <form method="post" class="d-flex gap-2 flex-wrap align-items-end p-2 rounded"
-              style="background:#fffbeb;border:1px dashed #fde68a">
-          {% csrf_token %}
-          <input type="hidden" name="_action" value="add_sprint_budget">
-          <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
-          <div>
-            <label class="rp-label" style="font-size:11.5px">Sprint</label>
-            <select name="{{ sprint_budget_form.sprint.html_name }}"
-                    class="form-select rp-select" style="max-width:160px;font-size:12.5px">
-              <option value="">— Select —</option>
-              {% for s in sprint_budget_form.fields.sprint.queryset %}
-              <option value="{{ s.pk }}">{{ s.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="rp-label" style="font-size:11.5px">Budget (£)</label>
-            <input type="number" step="0.01" min="0"
-                   name="{{ sprint_budget_form.budget_amount.html_name }}"
-                   class="form-control rp-input" style="max-width:110px;font-size:12.5px"
-                   placeholder="e.g. 20000" />
-          </div>
-          <div>
-            <label class="rp-label" style="font-size:11.5px">Notes</label>
-            <input type="text"
-                   name="{{ sprint_budget_form.notes.html_name }}"
-                   class="form-control rp-input" style="max-width:140px;font-size:12.5px"
-                   placeholder="Optional" />
-          </div>
-          <button type="submit" class="btn btn-sm btn-warning" style="font-size:12.5px">
-            <i class="bi bi-check-lg me-1"></i>Add
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:12.5px"
-                  onclick="toggleSprintBudgetForm('{{ pp.pk }}')">Cancel</button>
-        </form>
-        <p class="rp-hint mt-1 ms-1" style="font-size:11.5px">
-          Per-sprint budgets supersede the overall days calculation for that sprint (req. 3.15).
-        </p>
-      </div>
-      {% if not pp.sprint_budgets.exists %}
-      <div class="mb-2">
-        <button class="btn btn-ghost-icon" style="font-size:12px;height:auto;padding:2px 6px;color:#92400e"
-                onclick="toggleSprintBudgetForm('{{ pp.pk }}')" title="Add per-sprint budget">
-          <i class="bi bi-calendar2-week me-1"></i>Add per-sprint budget release
-        </button>
-      </div>
-      {% endif %}
-
-      <!-- Teams + phases + assignments -->
-      {% for ppt in pp.project_teams.all %}
-      <div class="border rounded mb-3 p-3"
-           style="background:#fafafa;border-color:var(--color-border,#e2e8f0) !important">
-
-        <!-- Team header -->
-        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-          <div class="d-flex align-items-center gap-2 flex-wrap">
-            <span class="fw-500" style="font-size:13.5px">
-              <i class="bi bi-people me-1 text-secondary"></i>{{ ppt.team.name }}
-            </span>
-            <span class="rp-badge rp-badge--muted" style="font-size:11px">
-              Seq. {{ ppt.sequence_order }}
-            </span>
-            <span class="rp-badge rp-badge--muted" style="font-size:11px">
-              {{ ppt.allocation_value }}{% if ppt.allocation_type == 'PERCENT' %}%{% elif ppt.allocation_type == 'BUDGET' %}£{% else %}d{% endif %}
-              {% if ppt.allocated_days %} = {{ ppt.allocated_days }}d{% endif %}
-            </span>
-          </div>
-          <button class="btn btn-sm btn-outline-primary"
-                  style="font-size:11.5px;padding:3px 10px"
-                  onclick="openPhaseModal('{{ plan.pk }}', '{{ ppt.pk }}', null)">
-            <i class="bi bi-plus me-1"></i>Add phase
-          </button>
-        </div>
-
-        <!-- Phases -->
-        {% for phase in ppt.phases.all %}
-        <div class="border-start ps-3 mb-3"
-             style="border-color:#6366f1 !important;border-left-width:2px !important">
-
-          <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">
-            <div class="flex-grow-1">
-              <span class="fw-500" style="font-size:13px">{{ phase.name }}</span>
-
-              <!-- Timeline (2.5) -->
-              {% if phase.start_sprint and phase.end_sprint %}
-              <span class="text-secondary ms-2" style="font-size:12px">
-                <i class="bi bi-calendar3-range me-1"></i>
-                {{ phase.start_sprint.name }} → {{ phase.end_sprint.name }}
-              </span>
-              {% else %}
-              <span class="ms-2" style="font-size:11.5px;color:#f59e0b">
-                <i class="bi bi-exclamation-circle me-1"></i>Dates not set
-              </span>
-              {% endif %}
-
-              <!-- Ramp pattern (2.9) -->
-              <span class="rp-badge rp-badge--muted ms-1" style="font-size:10px"
-                    title="Allocation pattern">
-                <i class="bi bi-bar-chart me-1"></i>{{ phase.get_ramp_pattern_display }}
-              </span>
-
-              <!-- Max days (2.10) -->
-              {% if phase.max_days_per_sprint %}
-              <span class="rp-badge rp-badge--muted ms-1" style="font-size:10px"
-                    title="Max days per sprint cap">
-                max {{ phase.max_days_per_sprint }}d
-              </span>
-              {% endif %}
-
-              <!-- Dependency (2.2) -->
-              {% if phase.predecessor_phase %}
-              <span class="rp-badge ms-1"
-                    style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:10px"
-                    title="{{ phase.get_dependency_type_display }}">
-                {{ phase.dependency_type }} ← {{ phase.predecessor_phase.name }}
-              </span>
-              {% endif %}
-            </div>
-            <div class="d-flex gap-1 flex-shrink-0">
-              <button class="btn btn-ghost-icon" style="width:24px;height:24px;font-size:11px"
-                      title="Edit phase"
-                      onclick="openPhaseModal('{{ plan.pk }}', null, '{{ phase.pk }}')">
-                <i class="bi bi-pencil"></i>
-              </button>
-              <button class="btn btn-ghost-icon btn-ghost-icon--danger"
-                      style="width:24px;height:24px;font-size:11px"
-                      title="Delete phase"
-                      onclick="deletePhase('{{ plan.pk }}', '{{ phase.pk }}', '{{ phase.name|escapejs }}')">
-                <i class="bi bi-trash"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Assignments -->
-          <div class="ms-1" id="assignments-{{ phase.pk }}">
-            {% for a in phase.assignments.all %}
-            <div class="d-flex align-items-center gap-2 py-1 border-bottom assignment-row"
-                 data-assignment="{{ a.pk }}" style="font-size:12.5px">
-              {% if a.assignment_type == 'ARCHITECT' %}
-              <i class="bi bi-award-fill text-warning" title="Architect"></i>
-              {% elif a.assignment_type == 'ADHOC' %}
-              <i class="bi bi-lightning-fill text-secondary" title="Adhoc/BAU"></i>
-              {% elif a.is_interim %}
-              <i class="bi bi-arrow-left-right text-info" title="Interim"></i>
-              {% else %}
-              <i class="bi bi-person-fill text-secondary"></i>
-              {% endif %}
-              <span class="fw-500">{{ a.display_name }}</span>
-              <span class="rp-badge rp-badge--muted" style="font-size:10px">
-                {{ a.get_assignment_type_display }}
-              </span>
-              {% if a.is_interim %}
-              <span class="rp-badge"
-                    style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:10px">
-                Interim
-              </span>
-              {% endif %}
-              <!-- Gap display (2.6) -->
-              {% if a.pause_from_sprint %}
-              <span class="text-secondary" style="font-size:11px">
-                <i class="bi bi-pause-circle me-1"></i>
-                Paused {{ a.pause_from_sprint.name }}
-                {% if a.resume_at_sprint %}→ {{ a.resume_at_sprint.name }}{% endif %}
-              </span>
-              {% endif %}
-              <div class="ms-auto d-flex gap-1">
-                <button class="btn btn-ghost-icon" style="width:22px;height:22px;font-size:10px"
-                        onclick="editAssignment('{{ plan.pk }}', '{{ a.pk }}')">
-                  <i class="bi bi-pencil"></i>
-                </button>
-                <button class="btn btn-ghost-icon btn-ghost-icon--danger"
-                        style="width:22px;height:22px;font-size:10px"
-                        onclick="deleteAssignment('{{ plan.pk }}', '{{ a.pk }}', '{{ a.display_name|escapejs }}')">
-                  <i class="bi bi-trash"></i>
-                </button>
-              </div>
-            </div>
-            {% empty %}
-            <div class="text-secondary py-1" style="font-size:12px">No engineers assigned.</div>
-            {% endfor %}
-          </div>
-
-          <button class="btn btn-ghost-icon mt-2"
-                  style="font-size:12px;height:auto;padding:3px 8px;color:#6366f1"
-                  onclick="addAssignment('{{ plan.pk }}', '{{ phase.pk }}')">
-            <i class="bi bi-person-plus me-1"></i>Assign engineer
-          </button>
-        </div>
-        {% empty %}
-        <p class="text-secondary mb-1" style="font-size:12.5px">
-          No phases yet.
-          <button class="btn btn-ghost-icon" style="font-size:12px;height:auto;padding:0 4px;color:#6366f1"
-                  onclick="openPhaseModal('{{ plan.pk }}', '{{ ppt.pk }}', null)">
-            Add a phase
-          </button>
-        </p>
-        {% endfor %}
-      </div>
-      {% empty %}
-      <div class="border rounded p-3" style="border-style:dashed !important;background:#fafafa">
-        <p class="text-secondary mb-2" style="font-size:13px">No teams assigned yet.</p>
-        <form method="post" class="d-flex gap-2 flex-wrap align-items-end">
-          {% csrf_token %}
-          <input type="hidden" name="_action" value="add_team">
-          <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
-          <select name="{{ add_team_form.team.html_name }}"
-                  class="form-select rp-select" style="max-width:180px">
-            <option value="">— Team —</option>
-            {% for t in add_team_form.fields.team.queryset %}
-            <option value="{{ t.pk }}">{{ t.name }}</option>
-            {% endfor %}
-          </select>
-          <select name="{{ add_team_form.allocation_type.html_name }}"
-                  class="form-select rp-select" style="max-width:120px">
-            {% for val, label in add_team_form.fields.allocation_type.choices %}
-            <option value="{{ val }}">{{ label }}</option>
-            {% endfor %}
-          </select>
-          <input type="number" step="0.01" min="0"
-                 name="{{ add_team_form.allocation_value.html_name }}"
-                 class="form-control rp-input" style="max-width:80px" placeholder="100"/>
-          <button type="submit" class="btn btn-sm btn-primary">
-            <i class="bi bi-plus me-1"></i>Assign
-          </button>
-        </form>
-      </div>
-      {% endfor %}
-
-      <!-- Add another team -->
-      {% if pp.project_teams.exists %}
-      <details class="mt-2">
-        <summary style="font-size:12.5px;cursor:pointer;color:#6366f1;list-style:none">
-          <i class="bi bi-plus me-1"></i>Add another team to this project
-        </summary>
-        <form method="post" class="d-flex gap-2 flex-wrap align-items-end mt-2">
-          {% csrf_token %}
-          <input type="hidden" name="_action" value="add_team">
-          <input type="hidden" name="plan_project_pk" value="{{ pp.pk }}">
-          <select name="{{ add_team_form.team.html_name }}"
-                  class="form-select rp-select" style="max-width:180px">
-            <option value="">— Team —</option>
-            {% for t in add_team_form.fields.team.queryset %}
-            <option value="{{ t.pk }}">{{ t.name }}</option>
-            {% endfor %}
-          </select>
-          <select name="{{ add_team_form.allocation_type.html_name }}"
-                  class="form-select rp-select" style="max-width:120px">
-            {% for val, label in add_team_form.fields.allocation_type.choices %}
-            <option value="{{ val }}">{{ label }}</option>
-            {% endfor %}
-          </select>
-          <input type="number" step="0.01" min="0"
-                 name="{{ add_team_form.allocation_value.html_name }}"
-                 class="form-control rp-input" style="max-width:80px" placeholder="100"/>
-          <input type="number" min="1"
-                 name="{{ add_team_form.sequence_order.html_name }}"
-                 value="{{ pp.project_teams.count|add:'1' }}"
-                 class="form-control rp-input" style="max-width:60px"
-                 title="Sequence order"/>
-          <button type="submit" class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-plus me-1"></i>Assign
-          </button>
-        </form>
-      </details>
-      {% endif %}
-
     </div>
     {% endfor %}
+
+    {% if plan_projects|length > 3 %}
+    <p class="text-secondary text-center mb-0" style="font-size:12.5px">
+      + {{ plan_projects|length|add:"-3" }} more —
+      <a href="{% url 'resource_plan:projects' plan.pk %}">view all projects →</a>
+    </p>
+    {% endif %}
 
     {% else %}
     <div class="rp-card text-center py-5 text-secondary">
       <i class="bi bi-kanban display-6 d-block mb-2 opacity-25"></i>
-      No projects scoped yet. Add projects using the form on the left.
+      No projects added yet.
+      Use the form on the left to add the first project.
     </div>
     {% endif %}
+
   </div>
 </div>
 
-<!-- ══ Phase modal ══ -->
+<div class="modal fade" id="teamModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:500px">
+    <div class="modal-content rp-modal">
+      <div class="modal-header border-0 pb-0">
+        <div>
+          <h5 class="modal-title" id="teamModalTitle">Assign team</h5>
+          <p class="text-secondary mb-0" id="teamModalSubtitle"
+             style="font-size:12.5px"></p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="teamModalBody">
+        <div class="text-center py-3">
+          <span class="spinner-border spinner-border-sm me-2"></span>Loading…
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="phaseModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered" style="max-width:580px">
     <div class="modal-content rp-modal">
@@ -578,14 +459,14 @@
       </div>
       <div class="modal-body" id="phaseModalBody">
         <div class="text-center py-3">
-          <span class="spinner-border spinner-border-sm me-2"></span>Loading…
+          <span class="spinner-border spinner-border-sm"></span>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ══ Assignment modal ══ -->
+
 <div class="modal fade" id="assignmentModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered" style="max-width:520px">
     <div class="modal-content rp-modal">
@@ -595,7 +476,7 @@
       </div>
       <div class="modal-body" id="assignmentModalBody">
         <div class="text-center py-3">
-          <span class="spinner-border spinner-border-sm me-2"></span>Loading…
+          <span class="spinner-border spinner-border-sm"></span>
         </div>
       </div>
     </div>
@@ -606,23 +487,36 @@
 
 {% block extra_js %}
 <script>
-const _planPk = {{ plan.pk }};
-const _csrf   = '{{ csrf_token }}';
-
-/* ── 2.1 Basis £ display ──────────────────────────────── */
-let _currentEstimate = null;
-let _currentBudget   = null;
+/* ── Bug 1 + 2 fix: Basis £ display ────────────────────────
+   Budget:  reads from window._budgetMap[project_pk] (from view context)
+   Estimate: reads from option's data-estimate
+   Custom:  shows the custom input field ONLY, no green display
+────────────────────────────────────────────────────────── */
+let _selectedProjectPk = null;
+let _selectedEstimate  = null;
 
 function onProjectSelect(sel) {
   const opt = sel.options[sel.selectedIndex];
-  _currentEstimate = opt.dataset.estimate || null;
-  _currentBudget   = opt.dataset.budget   || null;
-  _refreshBasisAmount(document.querySelector('[name="{{ add_project_form.basis.html_name }}"]')?.value);
+  _selectedProjectPk = opt.value || null;
+  _selectedEstimate  = opt.dataset.estimate ? parseFloat(opt.dataset.estimate) : null;
+  _refreshBasisAmount(document.getElementById('basis-select')?.value);
 }
 
 function onBasisChange(sel) {
   _refreshBasisAmount(sel.value);
-  toggleCustomAmount(sel);
+  // Toggle custom input field
+  const cf = document.getElementById('custom-amount-field');
+  if (cf) cf.classList.toggle('d-none', sel.value !== 'CUSTOM');
+  // Clear custom input when switching away
+  if (sel.value !== 'CUSTOM') {
+    const ci = document.getElementById('custom-amount-input');
+    if (ci) ci.value = '';
+  }
+}
+
+function onCustomAmountInput(val) {
+  // Bug 2 fix: do NOT show the green display for custom — it's redundant
+  // The input itself is the display
 }
 
 function _refreshBasisAmount(basis) {
@@ -631,50 +525,134 @@ function _refreshBasisAmount(basis) {
   const labelEl   = document.getElementById('basis-amount-label');
   if (!displayEl) return;
 
-  let amount = null, label = '';
-  if (basis === 'ESTIMATE' && _currentEstimate) {
-    amount = parseFloat(_currentEstimate);
-    label  = '(from project estimates)';
-  } else if (basis === 'BUDGET' && _currentBudget) {
-    amount = parseFloat(_currentBudget);
-    label  = '(from budget — active figure)';
-  } else if (basis === 'CUSTOM') {
-    const customInput = document.getElementById('custom-amount-input');
-    if (customInput?.value) {
-      amount = parseFloat(customInput.value);
-      label  = '(custom amount entered)';
-    }
+  // Bug 2 fix: always hide for CUSTOM
+  if (basis === 'CUSTOM' || !basis) {
+    displayEl.classList.add('d-none');
+    return;
   }
 
-  if (amount !== null && !isNaN(amount)) {
-    valueEl.textContent  = '£' + amount.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    labelEl.textContent  = label;
+  let amount = null, label = '';
+  if (basis === 'ESTIMATE') {
+    amount = _selectedEstimate;
+    label  = 'from project estimates';
+  } else if (basis === 'BUDGET') {
+    // Bug 1 fix: read from the pre-built budget map passed by the view
+    if (_selectedProjectPk && window._budgetMap) {
+      const v = window._budgetMap[_selectedProjectPk];
+      amount = (v !== undefined) ? v : null;
+    }
+    label = 'from budget (active figure)';
+  }
+
+  if (amount !== null && !isNaN(amount) && amount > 0) {
+    valueEl.textContent = '£' + amount.toLocaleString('en-GB', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+    labelEl.textContent = label;
     displayEl.classList.remove('d-none');
   } else {
     displayEl.classList.add('d-none');
   }
 }
 
-function showCustomAmount(val) {
-  _currentEstimate = null;
-  _currentBudget   = null;
-  _refreshBasisAmount('CUSTOM');
+/* ── Sprint month label ─────────────────────────────────── */
+function showSprintMonth(which, sel) {
+  const opt   = sel.options[sel.selectedIndex];
+  const month = opt.dataset.month;
+  const wrap  = document.getElementById(`${which}-sprint-month`);
+  if (!wrap) return;
+  if (month) {
+    wrap.querySelector('span').textContent = month;
+    wrap.classList.remove('d-none');
+  } else {
+    wrap.classList.add('d-none');
+  }
 }
 
-function toggleCustomAmount(sel) {
-  document.getElementById('custom-amount-field')
-    ?.classList.toggle('d-none', sel.value !== 'CUSTOM');
+/* ── Sprint budget row builder ──────────────────────────── */
+let _sprintBudgetCount = 0;
+function addSprintBudgetRow() {
+  const container = document.getElementById('sprint-budget-rows');
+  if (!container) return;
+  const i   = ++_sprintBudgetCount;
+  const div = document.createElement('div');
+  div.className = 'd-flex gap-2 align-items-center mb-2';
+  div.innerHTML = `
+    <select class="form-select rp-select" style="max-width:140px;font-size:12px"
+            name="sb_sprint_${i}">
+      <option value="">— Sprint —</option>
+      {% for s in sprint_budget_form.fields.sprint.queryset %}
+      <option value="{{ s.pk }}">{{ s.name }}</option>
+      {% endfor %}
+    </select>
+    <input type="number" step="0.01" min="0"
+           name="sb_amount_${i}"
+           class="form-control rp-input" style="max-width:100px;font-size:12px"
+           placeholder="£ amount" />
+    <input type="text" name="sb_notes_${i}"
+           class="form-control rp-input" style="max-width:110px;font-size:12px"
+           placeholder="Notes" />
+    <button type="button" class="btn btn-ghost-icon btn-ghost-icon--danger"
+            style="width:22px;height:22px;font-size:11px"
+            onclick="this.closest('div').remove()">
+      <i class="bi bi-x-lg"></i>
+    </button>`;
+  container.appendChild(div);
 }
 
-/* ── Sprint budget toggle ─────────────────────────────── */
-function toggleSprintBudgetForm(ppPk) {
-  const el = document.getElementById(`sprint-budget-form-${ppPk}`);
-  el?.classList.toggle('d-none');
+/* ── Team modal ─────────────────────────────────────────── */
+async function openTeamModal(planPk, ppPk, projectName, nextSeq) {
+  const modal    = bootstrap.Modal.getOrCreateInstance(
+    document.getElementById('teamModal')
+  );
+  const subtitle = document.getElementById('teamModalSubtitle');
+  const body     = document.getElementById('teamModalBody');
+  if (subtitle) subtitle.textContent = projectName;
+  body.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div>';
+  modal.show();
+
+  const res  = await fetch(`/resource-plan/${planPk}/projects/${ppPk}/team-form/`);
+  const html = await res.text();
+  body.innerHTML = html;
+
+  // Wire the save button
+  document.getElementById('save-team-btn')?.addEventListener('click', async () => {
+    const form = document.getElementById('team-add-form');
+    if (!form) return;
+    const errEl = document.getElementById('team-add-error');
+    const res   = await fetch(
+      `/resource-plan/${planPk}/projects/${ppPk}/team-form/`,
+      {
+        method:  'POST',
+        headers: { 'X-CSRFToken': window._csrf },
+        body:    new FormData(form),
+      }
+    );
+    const data = await res.json();
+    if (data.ok) {
+      modal.hide();
+      // Show success flash then reload to show the team
+      const div = document.createElement('div');
+      div.className = 'alert alert-success alert-dismissible fade show';
+      div.style.cssText = 'position:fixed;top:70px;right:20px;z-index:9999;font-size:13px';
+      div.innerHTML = `Team "${data.team_name}" assigned. <button class="btn-close" data-bs-dismiss="alert"></button>`;
+      document.body.appendChild(div);
+      setTimeout(() => location.reload(), 900);
+    } else {
+      if (errEl) {
+        errEl.textContent = data.detail ||
+          Object.values(data.errors || {}).flat().join(' ');
+        errEl.classList.remove('d-none');
+      }
+    }
+  });
 }
 
-/* ── Phase modal (loads phase_form_modal.html for edit) ── */
+/* ── Phase modal ─────────────────────────────────────────── */
 async function openPhaseModal(planPk, pptPk, phasePk) {
-  const modal   = bootstrap.Modal.getOrCreateInstance(document.getElementById('phaseModal'));
+  const modal   = bootstrap.Modal.getOrCreateInstance(
+    document.getElementById('phaseModal')
+  );
   const titleEl = document.getElementById('phaseModalTitle');
   const bodyEl  = document.getElementById('phaseModalBody');
   titleEl.textContent = phasePk ? 'Edit phase' : 'Add phase';
@@ -687,32 +665,37 @@ async function openPhaseModal(planPk, pptPk, phasePk) {
     bodyEl.innerHTML = html;
     _wirePhaseForm(planPk, phasePk, modal);
   } else {
-    bodyEl.innerHTML = _buildNewPhaseForm(planPk, pptPk);
+    bodyEl.innerHTML = _buildNewPhaseForm();
     _wireNewPhaseSubmit(planPk, pptPk, modal);
   }
 }
 
-function _buildNewPhaseForm(planPk, pptPk) {
+function _buildNewPhaseForm() {
   return `
-  <p class="rp-hint mb-3" style="font-size:12.5px">
-    Use the phase edit form after adding to set full details (sprints, pattern, max days, dependencies).
-  </p>
   <div class="row g-2 mb-3">
     <div class="col-8">
       <label class="rp-label">Phase name *</label>
-      <input type="text" id="new-phase-name" class="form-control rp-input" value="Phase 1" />
+      <input type="text" id="new-phase-name" class="form-control rp-input"
+             value="Phase 1" />
     </div>
     <div class="col-4">
       <label class="rp-label">Order</label>
-      <input type="number" id="new-phase-order" min="1" value="1" class="form-control rp-input" />
+      <input type="number" id="new-phase-order" min="1" value="1"
+             class="form-control rp-input" />
     </div>
   </div>
-  <div id="phase-error" class="alert alert-danger py-2 d-none" style="font-size:12.5px"></div>
-  <div class="d-flex gap-2 mt-3">
+  <p class="rp-hint mb-3">
+    After adding, use the Edit (✏) button to set sprint dates, ramp pattern,
+    max days, dependencies, and gaps.
+  </p>
+  <div id="phase-error" class="alert alert-danger py-2 d-none"
+       style="font-size:12.5px"></div>
+  <div class="d-flex gap-2">
     <button type="button" id="save-phase-btn" class="btn btn-sm btn-primary">
       <i class="bi bi-check-lg me-1"></i>Add phase
     </button>
-    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+            data-bs-dismiss="modal">Cancel</button>
   </div>`;
 }
 
@@ -720,28 +703,26 @@ function _wireNewPhaseSubmit(planPk, pptPk, modal) {
   document.getElementById('save-phase-btn')?.addEventListener('click', async () => {
     const name  = document.getElementById('new-phase-name')?.value?.trim();
     const order = document.getElementById('new-phase-order')?.value || '1';
+    const errEl = document.getElementById('phase-error');
     if (!name) {
-      document.getElementById('phase-error').textContent = 'Phase name is required.';
-      document.getElementById('phase-error').classList.remove('d-none');
+      errEl.textContent = 'Phase name is required.';
+      errEl.classList.remove('d-none');
       return;
     }
     const body = new URLSearchParams({
-      _action: 'add_phase',
-      plan_project_team_pk: pptPk,
-      csrfmiddlewaretoken: _csrf,
-      name:           name,
-      sequence_order: order,
-      ramp_pattern:   'FLAT',
+      _action: 'add_phase', plan_project_team_pk: pptPk,
+      csrfmiddlewaretoken: window._csrf,
+      name, sequence_order: order, ramp_pattern: 'FLAT',
     });
     const res = await fetch(`/resource-plan/${planPk}/configure/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    body.toString(),
+      body: body.toString(),
     });
     if (res.ok || res.redirected) { modal.hide(); location.reload(); }
     else {
-      document.getElementById('phase-error').textContent = 'Save failed. Check fields.';
-      document.getElementById('phase-error').classList.remove('d-none');
+      errEl.textContent = 'Save failed.';
+      errEl.classList.remove('d-none');
     }
   });
 }
@@ -751,7 +732,8 @@ function _wirePhaseForm(planPk, phasePk, modal) {
     const form = document.getElementById('phase-edit-form');
     if (!form) return;
     const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/edit/`, {
-      method: 'POST', headers: { 'X-CSRFToken': _csrf }, body: new FormData(form),
+      method: 'POST', headers: { 'X-CSRFToken': window._csrf },
+      body: new FormData(form),
     });
     const data = await res.json();
     if (data.ok) { modal.hide(); location.reload(); }
@@ -763,50 +745,52 @@ function _wirePhaseForm(planPk, phasePk, modal) {
 }
 
 async function deletePhase(planPk, phasePk, name) {
-  if (!confirm(`Delete phase "${name}"? All assignments and cells will be removed.`)) return;
+  if (!confirm(`Delete phase "${name}"?`)) return;
   const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/delete/`, {
-    method: 'POST', headers: { 'X-CSRFToken': _csrf }
+    method: 'POST', headers: { 'X-CSRFToken': window._csrf }
   });
   const data = await res.json();
   if (data.ok) location.reload();
   else alert(data.detail || 'Delete failed.');
 }
 
-/* ── Assignment modal ─────────────────────────────────── */
+/* ── Assignment modal ──────────────────────────────────── */
 async function addAssignment(planPk, phasePk) {
-  const modal   = bootstrap.Modal.getOrCreateInstance(document.getElementById('assignmentModal'));
-  const titleEl = document.getElementById('assignmentModalTitle');
-  const bodyEl  = document.getElementById('assignmentModalBody');
-  titleEl.textContent = 'Assign engineer';
-  bodyEl.innerHTML    = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div>';
-  modal.show();
-  const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/assignments/new/`);
-  const html = await res.text();
-  bodyEl.innerHTML = html;
-  _wireAssignmentForm(planPk, phasePk, null, modal);
+  _openAssignModal(planPk, `Assignment`, async () => {
+    const res  = await fetch(`/resource-plan/${planPk}/phases/${phasePk}/assignments/new/`);
+    return res.text();
+  }, (form, modal) => _wireAssignmentForm(planPk, phasePk, null, modal));
 }
 
 async function editAssignment(planPk, assignmentPk) {
+  _openAssignModal(planPk, 'Edit engineer', async () => {
+    const res  = await fetch(`/resource-plan/${planPk}/assignments/${assignmentPk}/edit/`);
+    return res.text();
+  }, (form, modal) => _wireAssignmentForm(planPk, null, assignmentPk, modal));
+}
+
+async function _openAssignModal(planPk, title, htmlFn, wireFn) {
   const modal   = bootstrap.Modal.getOrCreateInstance(document.getElementById('assignmentModal'));
-  const titleEl = document.getElementById('assignmentModalTitle');
-  const bodyEl  = document.getElementById('assignmentModalBody');
-  titleEl.textContent = 'Edit engineer assignment';
-  bodyEl.innerHTML    = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div>';
+  document.getElementById('assignmentModalTitle').textContent = title;
+  document.getElementById('assignmentModalBody').innerHTML =
+    '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div>';
   modal.show();
-  const res  = await fetch(`/resource-plan/${planPk}/assignments/${assignmentPk}/edit/`);
-  const html = await res.text();
-  bodyEl.innerHTML = html;
-  _wireAssignmentForm(planPk, null, assignmentPk, modal);
+  const html = await htmlFn();
+  document.getElementById('assignmentModalBody').innerHTML = html;
+  wireFn(null, modal);
 }
 
 function _wireAssignmentForm(planPk, phasePk, assignmentPk, modal) {
   document.getElementById('save-assignment-btn')?.addEventListener('click', async () => {
     const form = document.getElementById('assignment-form');
     if (!form) return;
-    const url = assignmentPk
+    const url  = assignmentPk
       ? `/resource-plan/${planPk}/assignments/${assignmentPk}/edit/`
       : `/resource-plan/${planPk}/phases/${phasePk}/assignments/new/`;
-    const res  = await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': _csrf }, body: new FormData(form) });
+    const res  = await fetch(url, {
+      method: 'POST', headers: { 'X-CSRFToken': window._csrf },
+      body: new FormData(form),
+    });
     const data = await res.json();
     if (data.ok) { modal.hide(); location.reload(); }
     else {
@@ -819,10 +803,11 @@ function _wireAssignmentForm(planPk, phasePk, assignmentPk, modal) {
 async function deleteAssignment(planPk, assignmentPk, name) {
   if (!confirm(`Remove "${name}" from this phase?`)) return;
   const res  = await fetch(`/resource-plan/${planPk}/assignments/${assignmentPk}/delete/`, {
-    method: 'POST', headers: { 'X-CSRFToken': _csrf }
+    method: 'POST', headers: { 'X-CSRFToken': window._csrf }
   });
   const data = await res.json();
-  if (data.ok) document.querySelector(`.assignment-row[data-assignment="${assignmentPk}"]`)?.remove();
+  if (data.ok)
+    document.querySelector(`.assignment-row[data-assignment="${assignmentPk}"]`)?.remove();
   else alert(data.detail || 'Delete failed.');
 }
 </script>

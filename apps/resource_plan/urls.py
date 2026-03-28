@@ -20,6 +20,8 @@ urlpatterns = [
     # ── Separate project config screen (Round A) ──────────
     path('<int:pk>/projects/',
          views.ResourcePlanProjectsView.as_view(), name='projects'),
+    path('<int:plan_pk>/projects/<int:pp_pk>/',
+         views.ResourcePlanProjectDetailView.as_view(), name='project_detail'),
     path('<int:plan_pk>/projects/<int:pp_pk>/edit/',
          views.ResourcePlanProjectEditView.as_view(), name='project_edit'),
     path('<int:plan_pk>/projects/<int:pp_pk>/delete/',
@@ -62,6 +64,10 @@ urlpatterns = [
     # ── Phase 3: Interim replacement ──────────────────────
     path('<int:plan_pk>/assignments/<int:assignment_pk>/interim/',
          views.ResourcePlanInterimView.as_view(), name='assignment_interim'),
+
+    # ── Configure: team-add modal ──────────────────────────
+    path('<int:plan_pk>/projects/<int:pp_pk>/team-form/',
+         views.ResourcePlanTeamAddView.as_view(), name='team_add'),
 
     # ── Phase 3: Export ───────────────────────────────────
     path('<int:pk>/export/',

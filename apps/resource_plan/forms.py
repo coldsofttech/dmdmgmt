@@ -91,11 +91,33 @@ class ResourcePlanProjectForm(forms.ModelForm):
         self.fields['confidence_override'].required = False
         self.fields['custom_amount'].required       = False
         self.fields['notes'].required               = False
+        self._plan = plan  # store for use in template context
         # Add blank option to override fields
         for f in ('priority_override', 'confidence_override'):
             self.fields[f].choices = [('', '— Inherit from project —')] + list(
                 self.fields[f].choices
-            )[1:]  # strip default empty first choice then prepend ours
+            )[1:]
+
+    def project_budget_map(self):
+        """
+        Returns {project_pk: active_budget_amount} for the plan's FY.
+        Used by the template to set data-budget on each option.
+        """
+        if not self._plan:
+            return {}
+        try:
+            from apps.budgets.models import Budget
+            budgets = Budget.objects.filter(
+                financial_year=self._plan.financial_year,
+                project__in=self.fields['project'].queryset,
+            ).select_related('project')
+            return {
+                b.project_id: float(b.active_budget)
+                for b in budgets
+                if b.active_budget is not None
+            }
+        except Exception:
+            return {}  # strip default empty first choice then prepend ours
 
 
 class ResourcePlanProjectTeamForm(forms.ModelForm):
@@ -108,6 +130,7 @@ class ResourcePlanProjectTeamForm(forms.ModelForm):
             'allocation_value': forms.NumberInput(attrs={
                 'class': 'form-control rp-input',
                 'step': '0.01', 'min': '0',
+                'placeholder': 'e.g. 100',
             }),
             'sequence_order':   forms.NumberInput(attrs={
                 'class': 'form-control rp-input',
@@ -124,6 +147,9 @@ class ResourcePlanProjectTeamForm(forms.ModelForm):
         self.fields['team'].queryset = Team.objects.filter(is_active=True).order_by('name')
         self.fields['team'].empty_label = '— Select team —'
         self.fields['notes'].required = False
+        # sequence_order defaults to 1 — never block submission if omitted
+        self.fields['sequence_order'].required = False
+        self.fields['sequence_order'].initial  = 1
 
 
 class ResourcePlanPhaseForm(forms.ModelForm):

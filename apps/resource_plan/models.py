@@ -193,8 +193,11 @@ class ResourcePlanProject(models.Model):
             day_rate = 0.0
         if day_rate <= 0:
             return None
+        import math
         raw = float(amount) / day_rate
-        return Decimal(str(_round_to_quarter(raw)))
+        # Ceil to nearest 0.25: always round UP so no effort is under-estimated
+        ceiled = math.ceil(raw * 4) / 4
+        return Decimal(str(ceiled))
 
     def save(self, *args, **kwargs):
         self.days_required = self._compute_days_required()
