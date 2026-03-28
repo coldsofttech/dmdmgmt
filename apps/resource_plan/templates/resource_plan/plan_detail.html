@@ -85,11 +85,13 @@
 
 {# Conflict banner #}
 {% if conflicts %}
-<div class="alert alert-danger d-flex gap-2 align-items-start mb-4" style="font-size:13px">
+<div id="conflict-banner"
+     class="alert alert-danger d-flex gap-2 align-items-start mb-4"
+     style="font-size:13px">
   <i class="bi bi-exclamation-triangle-fill mt-1 flex-shrink-0"></i>
   <div>
-    <strong>{{ conflicts|length }} unresolved conflict{{ conflicts|length|pluralize }}</strong>
-    <ul class="mb-0 mt-1 ps-3">
+    <strong id="conflict-count-text">{{ conflicts|length }} unresolved conflict{{ conflicts|length|pluralize }}</strong>
+    <ul class="mb-0 mt-1 ps-3" id="conflict-list">
       {% for c in conflicts|slice:":5" %}
       <li>
         <span class="fw-500">{{ c.get_conflict_type_display }}</span>
@@ -98,25 +100,33 @@
       </li>
       {% endfor %}
       {% if conflicts|length > 5 %}
-      <li class="text-secondary">+ {{ conflicts|length|add:"-5" }} more…</li>
+      <li class="text-secondary" id="conflict-overflow">
+        + {{ conflicts|length|add:"-5" }} more…
+      </li>
       {% endif %}
     </ul>
   </div>
 </div>
+{% else %}
+<div id="conflict-banner" class="d-none"></div>
 {% endif %}
 
 {# Unmapped projects banner #}
 {% if unmapped %}
-<div class="alert alert-warning d-flex gap-2 align-items-center mb-4" style="font-size:13px">
+<div id="unmapped-banner"
+     class="alert alert-warning d-flex gap-2 align-items-center mb-4"
+     style="font-size:13px">
   <i class="bi bi-kanban flex-shrink-0"></i>
   <span>
-    <strong>{{ unmapped|length }} active project{{ unmapped|length|pluralize }}</strong>
+    <strong id="unmapped-count-text">{{ unmapped|length }} active project{{ unmapped|length|pluralize }}</strong>
     not yet mapped.
     <a href="{% url 'resource_plan:configure' plan.pk %}" class="alert-link">
       Add in Configure →
     </a>
   </span>
 </div>
+{% else %}
+<div id="unmapped-banner" class="d-none"></div>
 {% endif %}
 
 {% if not team_grids %}
@@ -552,6 +562,7 @@
               {% for s_pk, s_total in tg.section2.totals.items %}{% if s_pk == sprint.pk %}
               <td class="rp-grid-cell rp-grid-tfoot-total"
                   data-sprint="{{ sprint.pk }}"
+                  data-team="{{ tg.team.pk }}"
                   data-val="{{ s_total }}">
                 {% if s_total > 0 %}{{ s_total|floatformat:"-2" }}
                 {% else %}<span class="rp-grid-zero">—</span>{% endif %}
@@ -609,7 +620,7 @@
           </thead>
           <tbody>
             {% for row in tg.section3.rows %}
-            <tr>
+            <tr data-member="{{ row.member.pk }}">
               <td class="rp-grid-td-fixed">{{ row.display_name }}</td>
               {% for sprint in sprints %}
               {% for s_pk, cell in row.cells.items %}{% if s_pk == sprint.pk %}

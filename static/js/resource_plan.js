@@ -223,6 +223,13 @@ async function saveCellEdit() {
   const days = Math.round(raw * 4) / 4;
   const url  = `${window._cellUpdateBase}${_activeAsmtPk}/${_activeSprintPk}/`;
 
+  // Snapshot the active cell references before async gap
+  const savedCell     = _activeCell;
+  const savedAsmtPk   = _activeAsmtPk;
+  const savedSprintPk = _activeSprintPk;
+
+  closeCellEditor();
+
   try {
     const res  = await fetch(url, {
       method:  'POST',
@@ -235,35 +242,70 @@ async function saveCellEdit() {
     const data = await res.json();
 
     if (data.ok) {
-      // 2.24 — Update cell display with smart formatter
+      // ── Update the edited cell ──────────────────────
       const display = _fmt(days);
-      _activeCell.innerHTML = days > 0
+      savedCell.innerHTML = days > 0
         ? display
         : '<span class="rp-grid-zero">—</span>';
+      savedCell.dataset.days = days;
+      savedCell.dataset.val  = days;
+      savedCell.classList.remove('rp-grid-cell--auto');
+      savedCell.classList.toggle('rp-grid-cell--manual', days > 0);
 
-      // Keep data-days and data-val in sync
-      _activeCell.dataset.days = days;
-      _activeCell.dataset.val  = days;
+      // ── Phase 2: live section updates ───────────────
 
-      // Update classes
-      _activeCell.classList.remove('rp-grid-cell--auto');
-      if (days > 0) {
-        _activeCell.classList.add('rp-grid-cell--manual');
+      // 1. Section 2 tfoot sprint total (use server value for accuracy)
+      if (data.sprint_total !== undefined) {
+        _updateS2TotalFromServer(savedSprintPk, data.sprint_total);
       } else {
-        _activeCell.classList.remove('rp-grid-cell--manual');
+        _updateS2Totals(savedCell);
       }
 
-      _updateS2Totals(_activeCell);
-      _showFlash(`Saved: ${display === '—' ? '0' : display}d`, 'success');
+      // 2. Section 3 remaining for this member × sprint
+      if (data.member_remaining !== undefined) {
+        const memberPk = savedCell.dataset.member ||
+          _getMemberPkFromAssignment(savedAsmtPk);
+        if (memberPk) {
+          _updateS3Cell(memberPk, savedSprintPk, parseFloat(data.member_remaining));
+        }
+      }
+
+      // 3. Conflict banner
+      if (data.conflict_count !== undefined) {
+        _updateConflictBanner(data.conflict_count, data.new_conflicts || []);
+      }
+
+      // 4. Unmapped banner
+      if (data.unmapped_count !== undefined) {
+        _updateUnmappedBanner(data.unmapped_count);
+      }
+
+      // 5. Flash — include any new conflict warnings
+      let flashMsg = `Saved: ${display === '—' ? '0' : display}d`;
+      if (data.new_conflicts && data.new_conflicts.length) {
+        const warnings = data.new_conflicts
+          .filter(c => c.severity === 'WARNING')
+          .map(c => c.description);
+        const errors = data.new_conflicts
+          .filter(c => c.severity === 'ERROR')
+          .map(c => c.description);
+        if (errors.length) {
+          _showFlash(`${flashMsg} — ⚠ ${errors[0]}`, 'error');
+          return;
+        }
+        if (warnings.length) {
+          _showFlash(`${flashMsg} — ⚠ ${warnings[0]}`, 'warning');
+          return;
+        }
+      }
+      _showFlash(flashMsg, 'success');
+
     } else {
-      // 2.23 — Show lock message if returned from server
       _showFlash(data.detail || 'Save failed.', 'error');
     }
   } catch {
-    _showFlash('Network error.', 'error');
+    _showFlash('Network error — check connection.', 'error');
   }
-
-  closeCellEditor();
 }
 
 // Close on Escape
@@ -282,12 +324,12 @@ document.addEventListener('click', e => {
 });
 
 
-/* ── Section 2 totals recomputation ──────────────────── */
+/* ── Section 2 totals — local recompute (fallback) ───── */
 
 function _updateS2Totals(changedCell) {
   const table    = changedCell.closest('.rp-grid-table');
   if (!table) return;
-  const sprintPk = changedCell.dataset.sprint;
+  const sprintPk  = changedCell.dataset.sprint;
   const totalCell = table.querySelector(
     `tfoot tr td[data-sprint="${sprintPk}"]`
   );
@@ -301,10 +343,152 @@ function _updateS2Totals(changedCell) {
     total += parseFloat(td.dataset.days ?? td.dataset.val) || 0;
   });
 
-  totalCell.innerHTML = total > 0
+  totalCell.innerHTML   = total > 0
     ? _fmt(total)
     : '<span class="rp-grid-zero">—</span>';
   totalCell.dataset.val = total;
+}
+
+/* ── Phase 2: server-accurate sprint total update ────── */
+
+function _updateS2TotalFromServer(sprintPk, serverTotal) {
+  const teamPk = _getActiveTeamPk();
+  if (!teamPk) return;
+  const s2Table = document.getElementById(`grid-s2-${teamPk}`);
+  if (!s2Table) return;
+  const footCell = s2Table.querySelector(`tfoot td[data-sprint="${sprintPk}"]`);
+  if (!footCell) return;
+  const val = parseFloat(serverTotal) || 0;
+  footCell.innerHTML   = val > 0 ? _fmt(val) : '<span class="rp-grid-zero">—</span>';
+  footCell.dataset.val = val;
+}
+
+/* ── Phase 2: Section 3 remaining cell live update ────── */
+
+function _updateS3Cell(memberPk, sprintPk, remaining) {
+  const teamPk = _getActiveTeamPk();
+  if (!teamPk) return;
+  const s3Table = document.getElementById(`grid-s3-${teamPk}`);
+  if (!s3Table) return;
+  const row  = s3Table.querySelector(`tr[data-member="${memberPk}"]`);
+  if (!row) return;
+  const cell = row.querySelector(`td[data-sprint="${sprintPk}"]`);
+  if (!cell) return;
+
+  const rem = parseFloat(remaining);
+  cell.innerHTML   = (rem !== 0) ? _fmt(rem) : '<span class="rp-grid-zero">—</span>';
+  cell.dataset.val = rem;
+
+  cell.classList.remove(
+    'rp-grid-cell--over', 'rp-grid-cell--ontrack', 'rp-grid-cell--s3-ok', 'rp-grid-cell--zero'
+  );
+  if      (rem < 0)  cell.classList.add('rp-grid-cell--over');
+  else if (rem === 0) cell.classList.add('rp-grid-cell--ontrack');
+  else                cell.classList.add('rp-grid-cell--s3-ok');
+
+  _updateS3TeamTotal(teamPk, sprintPk);
+}
+
+function _updateS3TeamTotal(teamPk, sprintPk) {
+  const s3Table  = document.getElementById(`grid-s3-${teamPk}`);
+  if (!s3Table) return;
+  const footCell = s3Table.querySelector(`tfoot td[data-sprint="${sprintPk}"]`);
+  if (!footCell) return;
+
+  let total = 0;
+  s3Table.querySelectorAll(`tbody tr[data-member] td[data-sprint="${sprintPk}"]`)
+         .forEach(td => { total += parseFloat(td.dataset.val) || 0; });
+
+  footCell.innerHTML   = _fmt(total);
+  footCell.dataset.val = total;
+  footCell.classList.remove('rp-grid-cell--over', 'rp-grid-cell--ontrack');
+  if      (total < 0)  footCell.classList.add('rp-grid-cell--over');
+  else if (total === 0) footCell.classList.add('rp-grid-cell--ontrack');
+}
+
+/* ── Phase 2: conflict banner live update ────────────── */
+
+function _updateConflictBanner(count, newConflicts) {
+  const banner = document.getElementById('conflict-banner');
+  if (!banner) return;
+
+  if (count === 0) {
+    banner.classList.add('d-none');
+    return;
+  }
+
+  // Ensure banner is visible with correct markup
+  if (banner.classList.contains('d-none')) {
+    banner.className =
+      'alert alert-danger d-flex gap-2 align-items-start mb-4';
+    banner.style.fontSize = '13px';
+    banner.innerHTML = `
+      <i class="bi bi-exclamation-triangle-fill mt-1 flex-shrink-0"></i>
+      <div>
+        <strong id="conflict-count-text"></strong>
+        <ul class="mb-0 mt-1 ps-3" id="conflict-list"></ul>
+      </div>`;
+  }
+
+  const countText = document.getElementById('conflict-count-text');
+  if (countText) {
+    countText.textContent =
+      `${count} unresolved conflict${count !== 1 ? 's' : ''}`;
+  }
+
+  // Prepend new conflict items to the list (cap at 5)
+  const ul = document.getElementById('conflict-list');
+  if (ul && newConflicts && newConflicts.length) {
+    newConflicts.forEach(c => {
+      const li = document.createElement('li');
+      li.innerHTML =
+        `<span class="fw-500">${_conflictLabel(c.type)}</span> — ${c.description}`;
+      ul.prepend(li);
+    });
+    const items = ul.querySelectorAll('li');
+    items.forEach((li, i) => { if (i >= 5) li.remove(); });
+  }
+}
+
+function _conflictLabel(type) {
+  const map = {
+    CAPACITY_EXCEEDED: 'Capacity exceeded',
+    OVER_BUDGET:       'Over budget/estimate',
+    UNDER_BUDGET:      'Under budget/estimate',
+    ENGINEER_LEAVE:    'Engineer has leave',
+    THRESHOLD_BREACH:  'Threshold breached',
+    PRIORITY_CLASH:    'Priority clash',
+  };
+  return map[type] || type;
+}
+
+/* ── Phase 2: unmapped banner live update ────────────── */
+
+function _updateUnmappedBanner(count) {
+  const banner    = document.getElementById('unmapped-banner');
+  const countText = document.getElementById('unmapped-count-text');
+  if (!banner) return;
+  if (count === 0) {
+    banner.classList.add('d-none');
+    return;
+  }
+  banner.classList.remove('d-none');
+  if (countText) {
+    countText.textContent =
+      `${count} active project${count !== 1 ? 's' : ''}`;
+  }
+}
+
+/* ── Active team tab helper ──────────────────────────── */
+
+function _getActiveTeamPk() {
+  const active = document.querySelector('#teamTabs .nav-link.active');
+  return active ? active.id.replace('tab-', '') : null;
+}
+
+function _getMemberPkFromAssignment(assignmentPk) {
+  const s2Row = document.querySelector(`tr[data-assignment="${assignmentPk}"]`);
+  return s2Row ? s2Row.dataset.member : null;
 }
 
 

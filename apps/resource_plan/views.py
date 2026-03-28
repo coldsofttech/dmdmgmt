@@ -404,27 +404,34 @@ class ResourcePlanCellUpdateView(View):
     def post(self, request, plan_pk, assignment_pk, sprint_pk):
         import json
         try:
-            # 2.23 — block edits when plan is LOCKED
+            # Block edits when plan is LOCKED
             plan = ResourcePlanService.get_plan(plan_pk)
             if plan.status == ResourcePlan.Status.LOCKED:
                 return JsonResponse(
-                    {'ok': False, 'detail': 'This resource plan is locked. Change plan status to Active or Draft to edit.'},
+                    {'ok': False, 'detail': 'This plan is locked. Change status to edit.'},
                     status=403,
                 )
             body = json.loads(request.body)
             days = body.get('days', 0)
-            cell = CellService.upsert_cell(
+
+            cell, ctx = CellService.upsert_cell(
                 assignment_id=int(assignment_pk),
                 sprint_id=int(sprint_pk),
                 days=days,
                 changed_by=body.get('changed_by', 'User'),
             )
             return JsonResponse({
-                'ok':            True,
-                'days':          str(cell.days_allocated),
-                'is_auto':       cell.is_auto,
-                'assignment_id': assignment_pk,
-                'sprint_id':     sprint_pk,
+                'ok':                   True,
+                'days':                 str(cell.days_allocated),
+                'is_auto':              cell.is_auto,
+                'assignment_id':        assignment_pk,
+                'sprint_id':            sprint_pk,
+                # Phase 2 enriched payload
+                'sprint_total':         str(ctx['sprint_total_allocated']),
+                'member_remaining':     str(ctx['member_remaining']),
+                'conflict_count':       ctx['conflict_count'],
+                'new_conflicts':        ctx['new_conflicts'],
+                'unmapped_count':       ctx['unmapped_count'],
             })
         except (ValidationError, Exception) as exc:
             msg = exc.message if hasattr(exc, 'message') else str(exc)
@@ -436,12 +443,24 @@ class ResourcePlanCellUpdateView(View):
 class ResourcePlanGeneratePlaceholdersView(View):
     def post(self, request, pk):
         try:
-            plan    = ResourcePlanService.get_plan(pk)
-            created = PlaceholderLeaveService.generate_for_plan(plan)
-            messages.success(
-                request,
-                f'{created} placeholder leave row{"s" if created != 1 else ""} generated.'
-            )
+            plan   = ResourcePlanService.get_plan(pk)
+            result = PlaceholderLeaveService.generate_for_plan(plan)
+            created = result.get('created', 0)
+            deleted = result.get('deleted', 0)
+            members = result.get('members', [])
+
+            summary_parts = [
+                f'{created} placeholder row{"s" if created != 1 else ""} created'
+            ]
+            if deleted:
+                summary_parts.append(f'{deleted} old row{"s" if deleted != 1 else ""} replaced')
+            if members:
+                names = ', '.join(m['name'] for m in members[:4])
+                if len(members) > 4:
+                    names += f' + {len(members) - 4} more'
+                summary_parts.append(f'for: {names}')
+
+            messages.success(request, ' — '.join(summary_parts) + '.')
         except Exception as exc:
             messages.error(request, str(exc))
         return HttpResponseRedirect(reverse('resource_plan:detail', args=[pk]))
